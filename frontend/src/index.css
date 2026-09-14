@@ -89,25 +89,12 @@ html, body, #root {
 
 /* Individual tiles: seal subpixel gaps */
 .leaflet-tile {
-  /* Force GPU compositing — eliminates fractional pixel offset gaps */
-  will-change: transform;
-  transform: translateZ(0);
-
-  /* Pixelated rendering — prevents browser antialiasing blurring edges */
-  image-rendering: -webkit-optimize-contrast; /* Safari */
-  image-rendering: crisp-edges;              /* Firefox / standard */
-
-  /* Transparent outline creates an inset 1px border that closes hairline gaps
-     without visually altering the tile content */
+  /* Prevent fractional subpixel rendering gaps between tiles */
   outline: 1px solid transparent;
-
-  /* Prevent 3D transform artifact (flicker/shimmer on scroll) */
   -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
+}
 
-  /* Slight size inflation at 1px to cover the gaps between adjacent tiles.
-     This is the most reliable seam-killer: each tile overlaps its neighbor
-     by 1px, hiding any gap. Does NOT affect tile coordinate math. */
-  width: calc(100% + 1px) !important;
-  height: calc(100% + 1px) !important;
+.leaflet-tile-container img {
+  box-shadow: 0 0 1px rgba(0, 0, 0, 0.05);
 }

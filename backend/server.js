@@ -12,10 +12,7 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
-const DB_DIR = path.resolve(__dirname, '../research/db');
-
-// Serve static preview images from research/db
-app.use('/api/tiles', express.static(DB_DIR));
+// Dynamic tile router (no local db dependencies)
 
 /**
  * Dynamic asynchronous tile endpoint:

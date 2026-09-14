@@ -75,19 +75,12 @@ app.get('/api/tile-at', (req, res) => {
 // Endpoint to fetch metadata and band catalogue
 app.get('/api/metadata', (req, res) => {
   try {
-    const metaPath = path.join(DB_DIR, 'metadata.json');
-    if (!fs.existsSync(metaPath)) {
-      return res.status(404).json({ error: 'Metadata not found' });
-    }
-    const data = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
-
     const bandsWithViews = [
       {
         id: 'rgb',
         code: 'RGB',
         name: 'True Color (RGB)',
         resolution: '10m',
-        viewUrl: '/api/tiles/RGB_preview.png',
         tilePattern: '/api/tiles/rgb/{z}/{x}/{y}.png',
         type: 'composite',
         description: 'Human-readable visual composite (B04 + B03 + B02)',
@@ -97,7 +90,6 @@ app.get('/api/metadata', (req, res) => {
         code: 'CIR',
         name: 'Color Infrared (CIR)',
         resolution: '10m',
-        viewUrl: '/api/tiles/CIR_falsecolor_preview.png',
         tilePattern: '/api/tiles/cir/{z}/{x}/{y}.png',
         type: 'composite',
         description: 'Near-infrared false-color composite (B08 + B04 + B03)',
@@ -107,7 +99,6 @@ app.get('/api/metadata', (req, res) => {
         code: 'B02',
         name: 'Band 2 — Blue',
         resolution: '10m',
-        viewUrl: '/api/tiles/BLUE_view.png',
         tilePattern: '/api/tiles/b02/{z}/{x}/{y}.png',
         type: 'band',
         description: '490 nm - Water penetration and soil/vegetation contrast',
@@ -117,7 +108,6 @@ app.get('/api/metadata', (req, res) => {
         code: 'B03',
         name: 'Band 3 — Green',
         resolution: '10m',
-        viewUrl: '/api/tiles/GREEN_view.png',
         tilePattern: '/api/tiles/b03/{z}/{x}/{y}.png',
         type: 'band',
         description: '560 nm - Peak vegetation reflectance',
@@ -127,7 +117,6 @@ app.get('/api/metadata', (req, res) => {
         code: 'B04',
         name: 'Band 4 — Red',
         resolution: '10m',
-        viewUrl: '/api/tiles/RED_view.png',
         tilePattern: '/api/tiles/b04/{z}/{x}/{y}.png',
         type: 'band',
         description: '665 nm - Chlorophyll absorption',
@@ -137,7 +126,6 @@ app.get('/api/metadata', (req, res) => {
         code: 'B08',
         name: 'Band 8 — NIR',
         resolution: '10m',
-        viewUrl: '/api/tiles/NIR_view.png',
         tilePattern: '/api/tiles/b08/{z}/{x}/{y}.png',
         type: 'band',
         description: '842 nm - Mesophyll reflection, land-water boundary',
@@ -147,7 +135,6 @@ app.get('/api/metadata', (req, res) => {
         code: 'B05',
         name: 'Band 5 — Red Edge 1',
         resolution: '20m',
-        viewUrl: '/api/tiles/B05_view.png',
         tilePattern: '/api/tiles/b05/{z}/{x}/{y}.png',
         type: 'band',
         description: '705 nm - Chlorophyll and nitrogen status',
@@ -157,7 +144,6 @@ app.get('/api/metadata', (req, res) => {
         code: 'B06',
         name: 'Band 6 — Red Edge 2',
         resolution: '20m',
-        viewUrl: '/api/tiles/B06_view.png',
         tilePattern: '/api/tiles/b06/{z}/{x}/{y}.png',
         type: 'band',
         description: '740 nm - Leaf Area Index (LAI) evaluation',
@@ -167,7 +153,6 @@ app.get('/api/metadata', (req, res) => {
         code: 'B07',
         name: 'Band 7 — Red Edge 3',
         resolution: '20m',
-        viewUrl: '/api/tiles/B07_view.png',
         tilePattern: '/api/tiles/b07/{z}/{x}/{y}.png',
         type: 'band',
         description: '783 nm - Transition to NIR plateau',
@@ -177,7 +162,6 @@ app.get('/api/metadata', (req, res) => {
         code: 'B8A',
         name: 'Band 8A — Narrow NIR',
         resolution: '20m',
-        viewUrl: '/api/tiles/B8A_view.png',
         tilePattern: '/api/tiles/b8a/{z}/{x}/{y}.png',
         type: 'band',
         description: '865 nm - Atmospheric water vapor avoidance',
@@ -187,7 +171,6 @@ app.get('/api/metadata', (req, res) => {
         code: 'B11',
         name: 'Band 11 — SWIR 1',
         resolution: '20m',
-        viewUrl: '/api/tiles/B11_view.png',
         tilePattern: '/api/tiles/b11/{z}/{x}/{y}.png',
         type: 'band',
         description: '1610 nm - Canopy moisture & snow/cloud discrimination',
@@ -197,7 +180,6 @@ app.get('/api/metadata', (req, res) => {
         code: 'B12',
         name: 'Band 12 — SWIR 2',
         resolution: '20m',
-        viewUrl: '/api/tiles/B12_view.png',
         tilePattern: '/api/tiles/b12/{z}/{x}/{y}.png',
         type: 'band',
         description: '2190 nm - Geology, soils & burn severity',
@@ -207,7 +189,6 @@ app.get('/api/metadata', (req, res) => {
         code: 'B01',
         name: 'Band 1 — Coastal Aerosol',
         resolution: '60m',
-        viewUrl: '/api/tiles/B01_view.png',
         tilePattern: '/api/tiles/b01/{z}/{x}/{y}.png',
         type: 'band',
         description: '443 nm - Coastal bathymetry & aerosol correction',
@@ -217,7 +198,6 @@ app.get('/api/metadata', (req, res) => {
         code: 'B09',
         name: 'Band 9 — Water Vapour',
         resolution: '60m',
-        viewUrl: '/api/tiles/B09_view.png',
         tilePattern: '/api/tiles/b09/{z}/{x}/{y}.png',
         type: 'band',
         description: '945 nm - Atmospheric water vapor absorption',
@@ -227,7 +207,6 @@ app.get('/api/metadata', (req, res) => {
         code: 'SCL',
         name: 'Scene Classification (SCL)',
         resolution: '20m',
-        viewUrl: '/api/tiles/SCL_view.png',
         tilePattern: '/api/tiles/scl/{z}/{x}/{y}.png',
         type: 'classification',
         description: 'Quality mask: vegetation, soil, water, clouds, shadow',
@@ -237,7 +216,6 @@ app.get('/api/metadata', (req, res) => {
         code: 'NDVI',
         name: 'Vegetation Index (NDVI)',
         resolution: '10m',
-        viewUrl: '/api/tiles/ndvi/15/23524/15287.png',
         tilePattern: '/api/tiles/ndvi/{z}/{x}/{y}.png',
         type: 'index',
         description: '(NIR - Red) / (NIR + Red) Normalized vegetation health',
@@ -247,7 +225,6 @@ app.get('/api/metadata', (req, res) => {
         code: 'NDMI',
         name: 'Moisture Index (NDMI)',
         resolution: '10m',
-        viewUrl: '/api/tiles/ndmi/15/23524/15287.png',
         tilePattern: '/api/tiles/ndmi/{z}/{x}/{y}.png',
         type: 'index',
         description: '(NIR - SWIR) / (NIR + SWIR) Canopy & soil moisture',
@@ -255,7 +232,6 @@ app.get('/api/metadata', (req, res) => {
     ];
 
     res.json({
-      ...data,
       availableBands: bandsWithViews,
     });
   } catch (err) {

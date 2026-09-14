@@ -4,7 +4,6 @@ import {
   TileLayer,
   useMap,
   useMapEvents,
-  Polygon,
 } from 'react-leaflet';
 import L from 'leaflet';
 import type { BandItem, Coordinates, TileCoordinates } from '../types';
@@ -16,14 +15,6 @@ interface MapViewportProps {
   center: [number, number];
   zoom: number;
 }
-
-// Sentinel-2 target AOI bounding box
-const AOI_POLYGON: [number, number][] = [
-  [11.957275, 78.443025],
-  [11.96708, 78.443025],
-  [11.96708, 78.453219],
-  [11.957275, 78.453219],
-];
 
 // Helper component to track map movements, zoom level changes, and pointer events
 const MapEventsObserver: React.FC<{
@@ -149,16 +140,6 @@ export const MapViewport: React.FC<MapViewportProps> = ({
           tileSize={256}
         />
 
-        {/* Target AOI Boundary Polygon */}
-        <Polygon
-          positions={AOI_POLYGON}
-          pathOptions={{
-            color: '#00bcd4',
-            weight: 1.5,
-            fillColor: 'transparent',
-            dashArray: '4, 4',
-          }}
-        />
       </MapContainer>
 
       {/* Floating Canvas Controls */}

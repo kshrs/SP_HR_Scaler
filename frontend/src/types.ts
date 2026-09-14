@@ -6,7 +6,7 @@ export interface BandItem {
   wavelength?: string;
   resolution: string;
   badgeColor?: string;
-  viewUrl: string;
+  viewUrl?: string;
   tilePattern: string;
   description: string;
 }

@@ -1,14 +1,13 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   MapContainer,
   TileLayer,
-  ImageOverlay,
   useMap,
   useMapEvents,
   Polygon,
 } from 'react-leaflet';
 import L from 'leaflet';
-import type { BandItem, Coordinates } from '../types';
+import type { BandItem, Coordinates, TileCoordinates } from '../types';
 
 interface MapViewportProps {
   activeBand: BandItem | null;
@@ -18,26 +17,52 @@ interface MapViewportProps {
   zoom: number;
 }
 
-// Sentinel-2 target AOI bounding box from research/db/metadata.json:
-// [minLon: 78.443025, minLat: 11.957275, maxLon: 78.453219, maxLat: 11.96708]
-const BOUNDS: L.LatLngBoundsExpression = [
-  [11.957275, 78.443025], // South-West [lat, lon]
-  [11.96708, 78.453219],  // North-East [lat, lon]
+// Sentinel-2 target AOI bounding box
+const AOI_POLYGON: [number, number][] = [
+  [11.957275, 78.443025],
+  [11.96708, 78.443025],
+  [11.96708, 78.453219],
+  [11.957275, 78.453219],
 ];
 
-// Helper to handle mousemove events over Leaflet map
-const MouseEventsHandler: React.FC<{ onPointerMove: (coords: Coordinates) => void }> = ({
-  onPointerMove,
-}) => {
-  useMapEvents({
+// Helper component to track map movements, zoom level changes, and pointer events
+const MapEventsObserver: React.FC<{
+  onPointerMove: (coords: Coordinates) => void;
+  onZoomChange: (z: number) => void;
+  onCenterTileChange: (tile: TileCoordinates) => void;
+}> = ({ onPointerMove, onZoomChange, onCenterTileChange }) => {
+  const map = useMapEvents({
     mousemove(e) {
       onPointerMove({ lat: e.latlng.lat, lng: e.latlng.lng });
     },
+    zoomend() {
+      const currentZoom = map.getZoom();
+      onZoomChange(currentZoom);
+      updateCenterTile(map.getCenter(), currentZoom);
+    },
+    moveend() {
+      updateCenterTile(map.getCenter(), map.getZoom());
+    },
   });
+
+  const updateCenterTile = (centerLatLng: L.LatLng, z: number) => {
+    const n = Math.pow(2, z);
+    const x = Math.floor(((centerLatLng.lng + 180) / 360) * n);
+    const latRad = (centerLatLng.lat * Math.PI) / 180;
+    const y = Math.floor(
+      ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n
+    );
+    onCenterTileChange({ x, y, z });
+  };
+
+  useEffect(() => {
+    updateCenterTile(map.getCenter(), map.getZoom());
+  }, []);
+
   return null;
 };
 
-// Map controller to execute external zoom and center actions
+// Map controller to execute external programmatic views
 const MapController: React.FC<{ center: [number, number]; zoom: number }> = ({
   center,
   zoom,
@@ -57,6 +82,8 @@ export const MapViewport: React.FC<MapViewportProps> = ({
   zoom,
 }) => {
   const mapRef = useRef<L.Map | null>(null);
+  const [currentZoom, setCurrentZoom] = useState<number>(zoom);
+  const [centerTile, setCenterTile] = useState<TileCoordinates>({ x: 23524, y: 15287, z: 15 });
 
   const handleZoomIn = () => {
     mapRef.current?.zoomIn();
@@ -86,6 +113,9 @@ export const MapViewport: React.FC<MapViewportProps> = ({
     return `${latDeg}°${latMin}'${latSec}"${latDir} ${lngDeg}°${lngMin}'${lngSec}"${lngDir}`;
   };
 
+  // Dynamic async tile pattern for the active band from the backend
+  const activeTileUrl = activeBand?.tilePattern || '/api/tiles/rgb/{z}/{x}/{y}.png';
+
   return (
     <main
       className="flex-1 relative bg-[#0f1113] overflow-hidden"
@@ -98,35 +128,36 @@ export const MapViewport: React.FC<MapViewportProps> = ({
         ref={mapRef}
         className="w-full h-full z-0"
         zoomControl={false}
+        minZoom={3}
+        maxZoom={18}
       >
         <MapController center={center} zoom={zoom} />
-        <MouseEventsHandler onPointerMove={onPointerMove} />
+        <MapEventsObserver
+          onPointerMove={onPointerMove}
+          onZoomChange={setCurrentZoom}
+          onCenterTileChange={setCenterTile}
+        />
 
-        {/* High-fidelity CartoDB Dark Matter / Esri Satellite base layer */}
+        {/* Base Layer: Dark CartoDB Matter */}
         <TileLayer
           attribution='&copy; <a href="https://carto.com/">CARTO</a>'
           url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
           maxZoom={20}
         />
 
-        {/* GeoTIFF Band Image Overlay aligned directly to Sentinel-2 Bounding Box */}
-        {activeBand && (
-          <ImageOverlay
-            url={activeBand.viewUrl}
-            bounds={BOUNDS}
-            opacity={0.92}
-            interactive={true}
-          />
-        )}
+        {/* Dynamic Async Sentinel-2 Tile Layer from Node Backend Cache */}
+        <TileLayer
+          key={activeBand?.id || 'rgb'}
+          url={activeTileUrl}
+          opacity={0.92}
+          maxZoom={18}
+          minZoom={4}
+          tileSize={256}
+        />
 
-        {/* AOI Bounding Box Polygon Accent Border */}
+        {/* Target AOI Boundary Polygon */}
         <Polygon
-          positions={[
-            [11.957275, 78.443025],
-            [11.96708, 78.443025],
-            [11.96708, 78.453219],
-            [11.957275, 78.453219],
-          ]}
+          positions={AOI_POLYGON}
           pathOptions={{
             color: '#00bcd4',
             weight: 1.5,
@@ -136,7 +167,7 @@ export const MapViewport: React.FC<MapViewportProps> = ({
         />
       </MapContainer>
 
-      {/* Map Floating Overlay Controls (Compass & Zoom) */}
+      {/* Floating Canvas Controls */}
       <div className="absolute right-6 top-6 z-10 flex flex-col items-center space-y-2 pointer-events-auto">
         <button
           onClick={handleZoomIn}
@@ -165,15 +196,22 @@ export const MapViewport: React.FC<MapViewportProps> = ({
         </button>
       </div>
 
-      {/* Active Band Badge Floating on Map */}
-      <div className="absolute left-6 top-6 z-10 pointer-events-auto bg-[#141619]/90 backdrop-blur-md border border-[#2b3036] px-3 py-1.5 rounded flex items-center space-x-2 text-xs">
-        <span className="w-2 h-2 rounded-full bg-[#00bcd4] animate-pulse" />
-        <span className="font-semibold text-white">
-          {activeBand ? activeBand.name : 'Sentinel-2 L2A'}
-        </span>
-        <span className="text-[#7a828e] font-mono text-[10px]">
-          {activeBand?.resolution}
-        </span>
+      {/* Active Band Badge & Zoom Tile HUD Floating on Map */}
+      <div className="absolute left-6 top-6 z-10 pointer-events-auto flex flex-col space-y-1">
+        <div className="bg-[#141619]/90 backdrop-blur-md border border-[#2b3036] px-3 py-1.5 rounded flex items-center space-x-2 text-xs">
+          <span className="w-2 h-2 rounded-full bg-[#00bcd4] animate-pulse" />
+          <span className="font-semibold text-white">
+            {activeBand ? activeBand.name : 'Sentinel-2 L2A'}
+          </span>
+          <span className="text-[#7a828e] font-mono text-[10px]">
+            {activeBand?.resolution}
+          </span>
+        </div>
+        <div className="bg-[#141619]/80 border border-[#22272d] px-2.5 py-1 rounded text-[10px] font-mono text-[#7a828e] flex items-center space-x-2">
+          <span>Zoom: <strong className="text-white">{currentZoom}</strong></span>
+          <span>•</span>
+          <span>Center Tile: <strong className="text-[#00bcd4]">[{centerTile.x}, {centerTile.y}]</strong></span>
+        </div>
       </div>
 
       {/* Map Coordinates & Attribution bar in corner */}

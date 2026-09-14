@@ -7,10 +7,17 @@ export interface BandItem {
   resolution: string;
   badgeColor?: string;
   viewUrl: string;
+  tilePattern: string;
   description: string;
 }
 
 export interface Coordinates {
   lat: number;
   lng: number;
+}
+
+export interface TileCoordinates {
+  x: number;
+  y: number;
+  z: number;
 }

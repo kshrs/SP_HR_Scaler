@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Header, Sidebar, MapViewport } from './components';
 import type { BandItem, Coordinates } from './types';
 
-// Default Sentinel-2 bands matching research/db/ exactly
+// Default Sentinel-2 bands matching research/db/ and backend STAC
 const INITIAL_BANDS: BandItem[] = [
   // 1. Visual Compositions
   {
@@ -13,6 +13,7 @@ const INITIAL_BANDS: BandItem[] = [
     resolution: '10m',
     description: 'B4, B3, B2',
     viewUrl: '/api/tiles/RGB_preview.png',
+    tilePattern: '/api/tiles/rgb/{z}/{x}/{y}.png',
   },
   {
     id: 'cir',
@@ -22,6 +23,7 @@ const INITIAL_BANDS: BandItem[] = [
     resolution: '10m',
     description: 'B8, B4, B3',
     viewUrl: '/api/tiles/CIR_falsecolor_preview.png',
+    tilePattern: '/api/tiles/cir/{z}/{x}/{y}.png',
   },
 
   // 2. Spectral Bands
@@ -34,6 +36,7 @@ const INITIAL_BANDS: BandItem[] = [
     resolution: '60m',
     badgeColor: 'text-cyan-400/90',
     viewUrl: '/api/tiles/B01_view.png',
+    tilePattern: '/api/tiles/b01/{z}/{x}/{y}.png',
     description: 'Atmospheric correction',
   },
   {
@@ -45,6 +48,7 @@ const INITIAL_BANDS: BandItem[] = [
     resolution: '10m',
     badgeColor: 'text-blue-400',
     viewUrl: '/api/tiles/BLUE_view.png',
+    tilePattern: '/api/tiles/b02/{z}/{x}/{y}.png',
     description: 'Surface water mapping',
   },
   {
@@ -56,6 +60,7 @@ const INITIAL_BANDS: BandItem[] = [
     resolution: '10m',
     badgeColor: 'text-emerald-400',
     viewUrl: '/api/tiles/GREEN_view.png',
+    tilePattern: '/api/tiles/b03/{z}/{x}/{y}.png',
     description: 'Vegetation peak reflectance',
   },
   {
@@ -67,6 +72,7 @@ const INITIAL_BANDS: BandItem[] = [
     resolution: '10m',
     badgeColor: 'text-red-400',
     viewUrl: '/api/tiles/RED_view.png',
+    tilePattern: '/api/tiles/b04/{z}/{x}/{y}.png',
     description: 'Chlorophyll absorption',
   },
   {
@@ -78,6 +84,7 @@ const INITIAL_BANDS: BandItem[] = [
     resolution: '20m',
     badgeColor: 'text-lime-400',
     viewUrl: '/api/tiles/B05_view.png',
+    tilePattern: '/api/tiles/b05/{z}/{x}/{y}.png',
     description: 'Leaf nitrogen content',
   },
   {
@@ -89,6 +96,7 @@ const INITIAL_BANDS: BandItem[] = [
     resolution: '20m',
     badgeColor: 'text-lime-400',
     viewUrl: '/api/tiles/B06_view.png',
+    tilePattern: '/api/tiles/b06/{z}/{x}/{y}.png',
     description: 'Leaf area index (LAI)',
   },
   {
@@ -100,6 +108,7 @@ const INITIAL_BANDS: BandItem[] = [
     resolution: '20m',
     badgeColor: 'text-lime-400',
     viewUrl: '/api/tiles/B07_view.png',
+    tilePattern: '/api/tiles/b07/{z}/{x}/{y}.png',
     description: 'Canopy biomass edge',
   },
   {
@@ -111,6 +120,7 @@ const INITIAL_BANDS: BandItem[] = [
     resolution: '10m',
     badgeColor: 'text-fuchsia-400',
     viewUrl: '/api/tiles/NIR_view.png',
+    tilePattern: '/api/tiles/b08/{z}/{x}/{y}.png',
     description: 'Canopy cell structure',
   },
   {
@@ -122,6 +132,7 @@ const INITIAL_BANDS: BandItem[] = [
     resolution: '20m',
     badgeColor: 'text-fuchsia-400',
     viewUrl: '/api/tiles/B8A_view.png',
+    tilePattern: '/api/tiles/b8a/{z}/{x}/{y}.png',
     description: 'Water vapor avoidance',
   },
   {
@@ -133,6 +144,7 @@ const INITIAL_BANDS: BandItem[] = [
     resolution: '60m',
     badgeColor: 'text-sky-400',
     viewUrl: '/api/tiles/B09_view.png',
+    tilePattern: '/api/tiles/b09/{z}/{x}/{y}.png',
     description: 'Atmospheric water column',
   },
   {
@@ -144,6 +156,7 @@ const INITIAL_BANDS: BandItem[] = [
     resolution: '20m',
     badgeColor: 'text-amber-400',
     viewUrl: '/api/tiles/B11_view.png',
+    tilePattern: '/api/tiles/b11/{z}/{x}/{y}.png',
     description: 'Moisture & snow/cloud',
   },
   {
@@ -155,6 +168,7 @@ const INITIAL_BANDS: BandItem[] = [
     resolution: '20m',
     badgeColor: 'text-amber-500',
     viewUrl: '/api/tiles/B12_view.png',
+    tilePattern: '/api/tiles/b12/{z}/{x}/{y}.png',
     description: 'Soils & mineralogy',
   },
 
@@ -167,6 +181,7 @@ const INITIAL_BANDS: BandItem[] = [
     resolution: '10m',
     badgeColor: 'text-green-400',
     viewUrl: '/api/tiles/RGB_preview.png',
+    tilePattern: '/api/tiles/rgb/{z}/{x}/{y}.png',
     description: '(B8-B4)/(B8+B4)',
   },
   {
@@ -177,6 +192,7 @@ const INITIAL_BANDS: BandItem[] = [
     resolution: '10m',
     badgeColor: 'text-cyan-400',
     viewUrl: '/api/tiles/BLUE_view.png',
+    tilePattern: '/api/tiles/b02/{z}/{x}/{y}.png',
     description: '(B3-B8)/(B3+B8)',
   },
 ];
@@ -186,12 +202,39 @@ const AOI_CENTER: [number, number] = [11.962177, 78.448122];
 
 export const App: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
-  const [bands] = useState<BandItem[]>(INITIAL_BANDS);
+  const [bands, setBands] = useState<BandItem[]>(INITIAL_BANDS);
   const [activeBandId, setActiveBandId] = useState<string>('rgb');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [pointerCoords, setPointerCoords] = useState<Coordinates | null>(null);
   const [center, setCenter] = useState<[number, number]>(AOI_CENTER);
   const [zoom, setZoom] = useState<number>(15);
+
+  // Sync band configuration dynamically from backend metadata
+  useEffect(() => {
+    fetch('/api/metadata')
+      .then((res) => {
+        if (!res.ok) throw new Error('Network error');
+        return res.json();
+      })
+      .then((data) => {
+        if (data.availableBands && data.availableBands.length > 0) {
+          const mapped: BandItem[] = data.availableBands.map((b: any) => ({
+            id: b.id,
+            code: b.code,
+            name: b.name,
+            category: b.type === 'composite' ? 'preset' : 'band',
+            resolution: b.resolution,
+            description: b.description,
+            viewUrl: b.viewUrl,
+            tilePattern: b.tilePattern || `/api/tiles/${b.id.toLowerCase()}/{z}/{x}/{y}.png`,
+          }));
+          setBands(mapped);
+        }
+      })
+      .catch((err) => {
+        console.warn('Using local band patterns:', err.message);
+      });
+  }, []);
 
   const activeBand = bands.find((b) => b.id === activeBandId) || bands[0];
 
@@ -211,7 +254,7 @@ export const App: React.FC = () => {
         onRecenter={handleRecenter}
       />
 
-      {/* 2. Main Content Area: Sidebar + Interactive Leaflet Map */}
+      {/* 2. Main Content Area: Sidebar + Interactive Leaflet Map with Async Slippy Tiles */}
       <div className="flex-1 flex overflow-hidden relative" data-purpose="viewport-container">
         {/* Left Primary Sidebar */}
         <Sidebar

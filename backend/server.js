@@ -2,6 +2,8 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
+const { getOrFetchTile } = require('./src/services/tileService');
+const { lonLatToTile } = require('./src/services/geoUtils');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -11,8 +13,66 @@ app.use(express.json());
 
 const DB_DIR = path.resolve(__dirname, '../research/db');
 
-// Serve static images directly from research/db
+// Serve static preview images from research/db
 app.use('/api/tiles', express.static(DB_DIR));
+
+/**
+ * Dynamic asynchronous tile endpoint:
+ * GET /api/tiles/:band/:z/:x/:y.png
+ * 
+ * - Understands zoom level z and tile coordinates (x, y)
+ * - Checks persistent cache first
+ * - Asynchronously fetches and caches Sentinel-2 data if needed
+ * - Thread-safe deduplication: no simultaneous redundant downloads
+ */
+app.get('/api/tiles/:band/:z/:x/:y.png', async (req, res) => {
+  try {
+    const { band, z, x, y } = req.params;
+    const zoom = parseInt(z, 10);
+    const tileX = parseInt(x, 10);
+    const tileY = parseInt(y, 10);
+
+    if (isNaN(zoom) || isNaN(tileX) || isNaN(tileY)) {
+      return res.status(400).json({ error: 'Invalid tile coordinates' });
+    }
+
+    const tileBuffer = await getOrFetchTile(band, zoom, tileX, tileY);
+
+    res.set({
+      'Content-Type': 'image/png',
+      'Cache-Control': 'public, max-age=86400, immutable',
+    });
+    res.send(tileBuffer);
+  } catch (err) {
+    console.error('[Tile Error]', err.message);
+    res.status(500).json({ error: 'Tile generation failed' });
+  }
+});
+
+/**
+ * Coordinate-to-tile lookup endpoint for frontend:
+ * GET /api/tile-at?lat=11.962&lon=78.448&zoom=15&band=rgb
+ */
+app.get('/api/tile-at', (req, res) => {
+  const lat = parseFloat(req.query.lat);
+  const lon = parseFloat(req.query.lon);
+  const zoom = parseInt(req.query.zoom || '15', 10);
+  const band = (req.query.band || 'rgb').toLowerCase();
+
+  if (isNaN(lat) || isNaN(lon) || isNaN(zoom)) {
+    return res.status(400).json({ error: 'Invalid coordinates or zoom' });
+  }
+
+  const tile = lonLatToTile(lon, lat, zoom);
+  res.json({
+    lat,
+    lon,
+    zoom,
+    band,
+    tile,
+    tileUrl: `/api/tiles/${band}/${tile.z}/${tile.x}/${tile.y}.png`,
+  });
+});
 
 // Endpoint to fetch metadata and band catalogue
 app.get('/api/metadata', (req, res) => {
@@ -23,7 +83,6 @@ app.get('/api/metadata', (req, res) => {
     }
     const data = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
 
-    // Augment with available web-renderable view URLs
     const bandsWithViews = [
       {
         id: 'rgb',
@@ -31,9 +90,9 @@ app.get('/api/metadata', (req, res) => {
         name: 'True Color (RGB)',
         resolution: '10m',
         viewUrl: '/api/tiles/RGB_preview.png',
-        processedUrl: '/api/tiles/SRM_processed_preview.png',
+        tilePattern: '/api/tiles/rgb/{z}/{x}/{y}.png',
         type: 'composite',
-        description: 'Human-readable visual composite (B04 + B03 + B02)'
+        description: 'Human-readable visual composite (B04 + B03 + B02)',
       },
       {
         id: 'cir',
@@ -41,8 +100,9 @@ app.get('/api/metadata', (req, res) => {
         name: 'Color Infrared (CIR)',
         resolution: '10m',
         viewUrl: '/api/tiles/CIR_falsecolor_preview.png',
+        tilePattern: '/api/tiles/cir/{z}/{x}/{y}.png',
         type: 'composite',
-        description: 'Near-infrared false-color composite (B08 + B04 + B03)'
+        description: 'Near-infrared false-color composite (B08 + B04 + B03)',
       },
       {
         id: 'B02',
@@ -50,8 +110,9 @@ app.get('/api/metadata', (req, res) => {
         name: 'Band 2 — Blue',
         resolution: '10m',
         viewUrl: '/api/tiles/BLUE_view.png',
+        tilePattern: '/api/tiles/b02/{z}/{x}/{y}.png',
         type: 'band',
-        description: '490 nm - Water penetration and soil/vegetation contrast'
+        description: '490 nm - Water penetration and soil/vegetation contrast',
       },
       {
         id: 'B03',
@@ -59,8 +120,9 @@ app.get('/api/metadata', (req, res) => {
         name: 'Band 3 — Green',
         resolution: '10m',
         viewUrl: '/api/tiles/GREEN_view.png',
+        tilePattern: '/api/tiles/b03/{z}/{x}/{y}.png',
         type: 'band',
-        description: '560 nm - Peak vegetation reflectance'
+        description: '560 nm - Peak vegetation reflectance',
       },
       {
         id: 'B04',
@@ -68,8 +130,9 @@ app.get('/api/metadata', (req, res) => {
         name: 'Band 4 — Red',
         resolution: '10m',
         viewUrl: '/api/tiles/RED_view.png',
+        tilePattern: '/api/tiles/b04/{z}/{x}/{y}.png',
         type: 'band',
-        description: '665 nm - Chlorophyll absorption'
+        description: '665 nm - Chlorophyll absorption',
       },
       {
         id: 'B08',
@@ -77,8 +140,9 @@ app.get('/api/metadata', (req, res) => {
         name: 'Band 8 — NIR',
         resolution: '10m',
         viewUrl: '/api/tiles/NIR_view.png',
+        tilePattern: '/api/tiles/b08/{z}/{x}/{y}.png',
         type: 'band',
-        description: '842 nm - Mesophyll reflection, land-water boundary'
+        description: '842 nm - Mesophyll reflection, land-water boundary',
       },
       {
         id: 'B05',
@@ -86,8 +150,9 @@ app.get('/api/metadata', (req, res) => {
         name: 'Band 5 — Red Edge 1',
         resolution: '20m',
         viewUrl: '/api/tiles/B05_view.png',
+        tilePattern: '/api/tiles/b05/{z}/{x}/{y}.png',
         type: 'band',
-        description: '705 nm - Chlorophyll and nitrogen status'
+        description: '705 nm - Chlorophyll and nitrogen status',
       },
       {
         id: 'B06',
@@ -95,8 +160,9 @@ app.get('/api/metadata', (req, res) => {
         name: 'Band 6 — Red Edge 2',
         resolution: '20m',
         viewUrl: '/api/tiles/B06_view.png',
+        tilePattern: '/api/tiles/b06/{z}/{x}/{y}.png',
         type: 'band',
-        description: '740 nm - Leaf Area Index (LAI) evaluation'
+        description: '740 nm - Leaf Area Index (LAI) evaluation',
       },
       {
         id: 'B07',
@@ -104,8 +170,9 @@ app.get('/api/metadata', (req, res) => {
         name: 'Band 7 — Red Edge 3',
         resolution: '20m',
         viewUrl: '/api/tiles/B07_view.png',
+        tilePattern: '/api/tiles/b07/{z}/{x}/{y}.png',
         type: 'band',
-        description: '783 nm - Transition to NIR plateau'
+        description: '783 nm - Transition to NIR plateau',
       },
       {
         id: 'B8A',
@@ -113,8 +180,9 @@ app.get('/api/metadata', (req, res) => {
         name: 'Band 8A — Narrow NIR',
         resolution: '20m',
         viewUrl: '/api/tiles/B8A_view.png',
+        tilePattern: '/api/tiles/b8a/{z}/{x}/{y}.png',
         type: 'band',
-        description: '865 nm - Atmospheric water vapor avoidance'
+        description: '865 nm - Atmospheric water vapor avoidance',
       },
       {
         id: 'B11',
@@ -122,8 +190,9 @@ app.get('/api/metadata', (req, res) => {
         name: 'Band 11 — SWIR 1',
         resolution: '20m',
         viewUrl: '/api/tiles/B11_view.png',
+        tilePattern: '/api/tiles/b11/{z}/{x}/{y}.png',
         type: 'band',
-        description: '1610 nm - Canopy moisture & snow/cloud discrimination'
+        description: '1610 nm - Canopy moisture & snow/cloud discrimination',
       },
       {
         id: 'B12',
@@ -131,8 +200,9 @@ app.get('/api/metadata', (req, res) => {
         name: 'Band 12 — SWIR 2',
         resolution: '20m',
         viewUrl: '/api/tiles/B12_view.png',
+        tilePattern: '/api/tiles/b12/{z}/{x}/{y}.png',
         type: 'band',
-        description: '2190 nm - Geology, soils & burn severity'
+        description: '2190 nm - Geology, soils & burn severity',
       },
       {
         id: 'B01',
@@ -140,8 +210,9 @@ app.get('/api/metadata', (req, res) => {
         name: 'Band 1 — Coastal Aerosol',
         resolution: '60m',
         viewUrl: '/api/tiles/B01_view.png',
+        tilePattern: '/api/tiles/b01/{z}/{x}/{y}.png',
         type: 'band',
-        description: '443 nm - Coastal bathymetry & aerosol correction'
+        description: '443 nm - Coastal bathymetry & aerosol correction',
       },
       {
         id: 'B09',
@@ -149,8 +220,9 @@ app.get('/api/metadata', (req, res) => {
         name: 'Band 9 — Water Vapour',
         resolution: '60m',
         viewUrl: '/api/tiles/B09_view.png',
+        tilePattern: '/api/tiles/b09/{z}/{x}/{y}.png',
         type: 'band',
-        description: '945 nm - Atmospheric water vapor absorption'
+        description: '945 nm - Atmospheric water vapor absorption',
       },
       {
         id: 'SCL',
@@ -158,14 +230,15 @@ app.get('/api/metadata', (req, res) => {
         name: 'Scene Classification (SCL)',
         resolution: '20m',
         viewUrl: '/api/tiles/SCL_view.png',
+        tilePattern: '/api/tiles/scl/{z}/{x}/{y}.png',
         type: 'classification',
-        description: 'Quality mask: vegetation, soil, water, clouds, shadow'
-      }
+        description: 'Quality mask: vegetation, soil, water, clouds, shadow',
+      },
     ];
 
     res.json({
       ...data,
-      availableBands: bandsWithViews
+      availableBands: bandsWithViews,
     });
   } catch (err) {
     console.error('Error reading metadata:', err);

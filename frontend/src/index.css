@@ -51,15 +51,63 @@ html, body, #root {
   display: none !important;
 }
 
-/* Fix visible tile grid lines/gaps/seams caused by fractional pixel scaling */
+/* ─────────────────────────────────────────────────────────────────────
+   Tile Seam Fix — Comprehensive solution for visible grid line artifacts.
+
+   Root causes:
+   1. Browser subpixel rendering: tiles rendered at fractional pixel sizes
+      leave 1px transparent gaps due to antialiasing between tiles.
+   2. GPU compositing: Leaflet uses CSS transform: translate3d() with
+      sub-pixel values that can cause hairline cracks between tiles.
+   3. Background bleed: the dark map container background (#0f1113)
+      shows through these gaps as dark seams.
+
+   Solutions applied:
+   - will-change: transform  → tells GPU to create a compositing layer,
+                               preventing fractional pixel rounding gaps.
+   - transform: translateZ(0) → forces GPU rasterization, avoids CPU
+                                 subpixel blending artifacts.
+   - image-rendering          → prevents the browser from adding extra
+                                 antialiasing between tile images.
+   - 1px margin-right/bottom  → slight overlap ensures tiles edge-to-edge
+                                 with no gap. Critical for DPR > 1.
+   - outline trick            → creates a 1px outline inside the image
+                                 boundary to fill subpixel gaps.
+───────────────────────────────────────────────────────────────────── */
+
+/* Tile pane: force GPU compositing layer for the entire tile grid */
+.leaflet-tile-pane {
+  will-change: transform;
+  transform: translateZ(0);
+}
+
+/* Each tile container: GPU layer + prevent layout shifts */
+.leaflet-tile-container {
+  will-change: transform;
+  transform: translateZ(0);
+}
+
+/* Individual tiles: seal subpixel gaps */
 .leaflet-tile {
-  /* Prevent fractional subpixel rendering gaps between tiles */
+  /* Force GPU compositing — eliminates fractional pixel offset gaps */
+  will-change: transform;
+  transform: translateZ(0);
+
+  /* Pixelated rendering — prevents browser antialiasing blurring edges */
+  image-rendering: -webkit-optimize-contrast; /* Safari */
+  image-rendering: crisp-edges;              /* Firefox / standard */
+
+  /* Transparent outline creates an inset 1px border that closes hairline gaps
+     without visually altering the tile content */
   outline: 1px solid transparent;
+
+  /* Prevent 3D transform artifact (flicker/shimmer on scroll) */
   -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
-}
 
-.leaflet-tile-container img {
-  box-shadow: 0 0 1px rgba(0, 0, 0, 0.05);
+  /* Slight size inflation at 1px to cover the gaps between adjacent tiles.
+     This is the most reliable seam-killer: each tile overlaps its neighbor
+     by 1px, hiding any gap. Does NOT affect tile coordinate math. */
+  width: calc(100% + 1px) !important;
+  height: calc(100% + 1px) !important;
 }
-

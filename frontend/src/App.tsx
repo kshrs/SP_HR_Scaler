@@ -190,8 +190,8 @@ const INITIAL_BANDS: BandItem[] = [
   },
 ];
 
-// Target AOI center coordinates from research/db/metadata.json: [11.962177, 78.448122]
-const AOI_CENTER: [number, number] = [11.962177, 78.448122];
+// Coimbatore, Tamil Nadu — primary AOI for the SIH demonstration
+const AOI_CENTER: [number, number] = [10.9981, 76.9366];
 
 export const App: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);

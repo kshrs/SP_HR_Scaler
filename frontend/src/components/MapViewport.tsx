@@ -77,7 +77,7 @@ export const MapViewport: React.FC<MapViewportProps> = ({
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [currentZoom, setCurrentZoom] = useState<number>(zoom);
-  const [centerTile, setCenterTile] = useState<TileCoordinates>({ x: 23524, y: 15287, z: 15 });
+  const [centerTile, setCenterTile] = useState<TileCoordinates>({ x: 23264, y: 15422, z: 15 });
   const [elevation, setElevation] = useState<number | null>(null);
   const [isFetchingElevation, setIsFetchingElevation] = useState<boolean>(false);
 
@@ -307,7 +307,7 @@ export const MapViewport: React.FC<MapViewportProps> = ({
         <span>
           {pointerCoords
             ? formatCoord(pointerCoords.lat, pointerCoords.lng)
-            : `11°57'44"N 78°26'52"E`}
+            : `10°59'53"N 76°56'10"E`}
         </span>
         <span className="flex items-center space-x-1">
           <span>Elevation:</span>

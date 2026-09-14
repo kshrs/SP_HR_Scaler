@@ -1,0 +1,52 @@
+@import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
+
+@theme {
+  --color-hub-bg: #111315;
+  --color-hub-sidebar: #141619;
+  --color-hub-panel: #1b1e22;
+  --color-hub-input: #191c20;
+  --color-hub-border: #22272d;
+  --color-hub-border-light: #2b3036;
+  --color-hub-muted: #7a828e;
+  --color-hub-cyan: #00bcd4;
+  --color-hub-active: #17252c;
+  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Custom dark scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #141619;
+}
+::-webkit-scrollbar-thumb {
+  background: #2b3038;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3c434e;
+}
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background-color: #111315;
+  color: #cbd5e1;
+}
+
+/* Dark mode overrides for Leaflet tiles and container */
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+  background: #0f1113 !important;
+}
+
+.leaflet-control-zoom {
+  display: none !important;
+}

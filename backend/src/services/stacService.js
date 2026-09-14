@@ -1,8 +1,13 @@
 const axios = require('axios');
 const path = require('path');
 const fs = require('fs');
+const { hasCopernicusCredentials, getCopernicusAuthToken } = require('./copernicusAuth');
 
-const STAC_API_URL = 'https://earth-search.aws.element84.com/v1/search';
+// Support either Copernicus STAC or AWS Open Data STAC
+const CDSE_STAC_URL = 'https://catalogue.dataspace.copernicus.eu/stac/search';
+const AWS_STAC_URL = 'https://earth-search.aws.element84.com/v1/search';
+
+const STAC_API_URL = process.env.STAC_API_URL || (hasCopernicusCredentials() ? CDSE_STAC_URL : AWS_STAC_URL);
 
 // Mapping of application band IDs to STAC asset keys
 const BAND_ASSET_MAP = {
@@ -37,8 +42,16 @@ async function findSceneForBBox(bbox) {
   }
 
   try {
+    const headers = {};
+    if (hasCopernicusCredentials()) {
+      const token = await getCopernicusAuthToken();
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+    }
+
     const payload = {
-      collections: ['sentinel-2-l2a'],
+      collections: ['sentinel-2-l2a', 'SENTINEL-2'],
       bbox: [bbox.west, bbox.south, bbox.east, bbox.north],
       datetime: '2024-01-01T00:00:00Z/2024-03-01T23:59:59Z',
       query: {
@@ -51,7 +64,7 @@ async function findSceneForBBox(bbox) {
       limit: 1,
     };
 
-    const response = await axios.post(STAC_API_URL, payload, { timeout: 8000 });
+    const response = await axios.post(STAC_API_URL, payload, { headers, timeout: 8000 });
     const features = response.data?.features || [];
 
     if (features.length > 0) {

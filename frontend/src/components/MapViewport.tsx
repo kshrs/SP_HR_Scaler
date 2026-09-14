@@ -75,6 +75,36 @@ export const MapViewport: React.FC<MapViewportProps> = ({
   const mapRef = useRef<L.Map | null>(null);
   const [currentZoom, setCurrentZoom] = useState<number>(zoom);
   const [centerTile, setCenterTile] = useState<TileCoordinates>({ x: 23524, y: 15287, z: 15 });
+  const [elevation, setElevation] = useState<number | null>(null);
+  const [isFetchingElevation, setIsFetchingElevation] = useState<boolean>(false);
+
+  // Dynamically update elevation when pointer coordinates or map center changes
+  useEffect(() => {
+    const targetLat = pointerCoords ? pointerCoords.lat : center[0];
+    const targetLng = pointerCoords ? pointerCoords.lng : center[1];
+
+    const timer = setTimeout(() => {
+      setIsFetchingElevation(true);
+      fetch(`/api/elevation?lat=${targetLat}&lon=${targetLng}`)
+        .then((res) => {
+          if (!res.ok) throw new Error('Elevation fetch failed');
+          return res.json();
+        })
+        .then((data) => {
+          if (typeof data.elevation === 'number') {
+            setElevation(data.elevation);
+          }
+        })
+        .catch((err) => {
+          console.warn('[Elevation] Fetch warning:', err.message);
+        })
+        .finally(() => {
+          setIsFetchingElevation(false);
+        });
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [pointerCoords?.lat, pointerCoords?.lng, center]);
 
   const handleZoomIn = () => {
     mapRef.current?.zoomIn();
@@ -196,7 +226,12 @@ export const MapViewport: React.FC<MapViewportProps> = ({
             ? formatCoord(pointerCoords.lat, pointerCoords.lng)
             : `11°57'44"N 78°26'52"E`}
         </span>
-        <span>Elevation: 1,420m</span>
+        <span className="flex items-center space-x-1">
+          <span>Elevation:</span>
+          <span className="text-slate-200 font-semibold">
+            {elevation !== null ? `${elevation.toLocaleString()}m` : isFetchingElevation ? '...' : '--'}
+          </span>
+        </span>
         <span>© Team ThunderBoltz - SIH26</span>
       </div>
     </main>

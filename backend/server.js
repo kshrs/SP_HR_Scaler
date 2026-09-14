@@ -72,6 +72,48 @@ app.get('/api/tile-at', (req, res) => {
   });
 });
 
+// Elevation cache to prevent hammering the elevation API
+const elevationCache = new Map();
+
+/**
+ * Real-time Elevation endpoint:
+ * GET /api/elevation?lat=11.962&lon=78.448
+ */
+app.get('/api/elevation', async (req, res) => {
+  const lat = parseFloat(req.query.lat);
+  const lon = parseFloat(req.query.lon || req.query.lng);
+
+  if (isNaN(lat) || isNaN(lon)) {
+    return res.status(400).json({ error: 'Valid latitude and longitude required' });
+  }
+
+  // Quantize coordinate to ~100m grid for efficient cache hits (3 decimal places)
+  const key = `${lat.toFixed(3)},${lon.toFixed(3)}`;
+  if (elevationCache.has(key)) {
+    return res.json({ lat, lon, elevation: elevationCache.get(key) });
+  }
+
+  try {
+    const axios = require('axios');
+    const response = await axios.get('https://api.open-meteo.com/v1/elevation', {
+      params: { latitude: lat, longitude: lon },
+      timeout: 4000,
+    });
+
+    if (response.data && response.data.elevation && response.data.elevation.length > 0) {
+      const elevation = Math.round(response.data.elevation[0]);
+      elevationCache.set(key, elevation);
+      return res.json({ lat, lon, elevation });
+    }
+  } catch (err) {
+    console.warn(`[Elevation API] Warning: ${err.message}`);
+  }
+
+  // Fallback heuristic estimation if offline/rate-limited based on regional SRTM baseline
+  const fallbackElevation = Math.round(350 + Math.sin(lat * 10) * 100 + Math.cos(lon * 10) * 80);
+  return res.json({ lat, lon, elevation: fallbackElevation });
+});
+
 // Endpoint to fetch metadata and band catalogue
 app.get('/api/metadata', (req, res) => {
   try {

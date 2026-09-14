@@ -138,12 +138,6 @@ export const MapViewport: React.FC<MapViewportProps> = ({
           onCenterTileChange={setCenterTile}
         />
 
-        {/* Base Layer: Dark CartoDB Matter */}
-        <TileLayer
-          attribution='&copy; <a href="https://carto.com/">CARTO</a>'
-          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-          maxZoom={20}
-        />
 
         {/* Dynamic Async Sentinel-2 Tile Layer from Node Backend Cache */}
         <TileLayer

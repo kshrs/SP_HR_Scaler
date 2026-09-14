@@ -232,6 +232,26 @@ app.get('/api/metadata', (req, res) => {
         type: 'classification',
         description: 'Quality mask: vegetation, soil, water, clouds, shadow',
       },
+      {
+        id: 'ndvi',
+        code: 'NDVI',
+        name: 'Vegetation Index (NDVI)',
+        resolution: '10m',
+        viewUrl: '/api/tiles/ndvi/15/23524/15287.png',
+        tilePattern: '/api/tiles/ndvi/{z}/{x}/{y}.png',
+        type: 'index',
+        description: '(NIR - Red) / (NIR + Red) Normalized vegetation health',
+      },
+      {
+        id: 'ndmi',
+        code: 'NDMI',
+        name: 'Moisture Index (NDMI)',
+        resolution: '10m',
+        viewUrl: '/api/tiles/ndmi/15/23524/15287.png',
+        tilePattern: '/api/tiles/ndmi/{z}/{x}/{y}.png',
+        type: 'index',
+        description: '(NIR - SWIR) / (NIR + SWIR) Canopy & soil moisture',
+      },
     ];
 
     res.json({

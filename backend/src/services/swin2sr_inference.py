@@ -56,23 +56,27 @@ def super_resolve_tile(img_bytes, target_size=(256, 256)):
     Takes PNG/JPEG bytes of a tile, runs Swin2SR 4x super-resolution,
     and returns high-resolution PNG bytes (256x256).
     """
+    import time
+    t_start = time.time()
     session = get_session()
     
     # 1. Load input image
     lr_pil = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+    orig_w, orig_h = lr_pil.size
     
-    # To keep inference snappy (< 1 second per tile on CPU) while achieving 4x transformer enhancement,
-    # resize input tile to 64x64 if larger, then run Swin2SR 4x upsampler to generate 256x256.
-    input_patch = lr_pil.resize((64, 64), Image.Resampling.BICUBIC)
+    # Use 96x96 resolution patch with LANCZOS resampling for rich spatial context
+    # 96x96 upscaled 4x by Swin2SR -> 384x384 super-resolved feature field
+    patch_size = 96
+    input_patch = lr_pil.resize((patch_size, patch_size), Image.Resampling.LANCZOS)
     
     arr = np.array(input_patch).astype(np.float32) / 255.0
-    tensor = np.transpose(arr, (2, 0, 1))[np.newaxis, ...]  # (1, 3, 64, 64)
+    tensor = np.transpose(arr, (2, 0, 1))[np.newaxis, ...]  # (1, 3, 96, 96)
     
-    # 2. Run ONNX Inference
+    # 2. Run ONNX Transformer Inference
     outputs = session.run(None, {'pixel_values': tensor})
-    out_tensor = outputs[0]  # (1, 3, 256, 256)
+    out_tensor = outputs[0]  # (1, 3, 384, 384)
     
-    # 3. Postprocess
+    # 3. Postprocess & Reconstruct Fine Ground Details
     out_clipped = np.clip(out_tensor[0], 0.0, 1.0)
     out_img = (np.transpose(out_clipped, (1, 2, 0)) * 255.0).round().astype(np.uint8)
     sr_pil = Image.fromarray(out_img)
@@ -80,10 +84,28 @@ def super_resolve_tile(img_bytes, target_size=(256, 256)):
     if sr_pil.size != target_size:
         sr_pil = sr_pil.resize(target_size, Image.Resampling.LANCZOS)
     
+    # Enhance structural sharpness
+    from PIL import ImageEnhance
+    enhancer = ImageEnhance.Sharpness(sr_pil)
+    sr_pil = enhancer.enhance(1.25)
+    
     # 4. Return PNG bytes
     out_buf = io.BytesIO()
     sr_pil.save(out_buf, format="PNG", optimize=True)
-    return out_buf.getvalue()
+    out_bytes = out_buf.getvalue()
+    
+    elapsed_ms = (time.time() - t_start) * 1000
+    mean_val = float(np.mean(out_clipped))
+    std_val = float(np.std(out_clipped))
+    
+    # Diagnostic print to stderr (visible in terminal logs)
+    sys.stderr.write(
+        f"[Swin2SR Model] Super-resolved {orig_w}x{orig_h} -> {patch_size}x{patch_size} "
+        f"-> ONNX {out_tensor.shape} in {elapsed_ms:.1f}ms | Mean: {mean_val:.3f}, Std: {std_val:.3f}\n"
+    )
+    sys.stderr.flush()
+    
+    return out_bytes
 
 
 def super_resolve_file(in_path, out_path):
@@ -106,6 +128,8 @@ def run_daemon():
     # Signal daemon readiness
     sys.stdout.write(json.dumps({"status": "ready"}) + "\n")
     sys.stdout.flush()
+    sys.stderr.write("[Swin2SR Daemon] Initialized and listening for tile requests.\n")
+    sys.stderr.flush()
 
     for line in sys.stdin:
         line = line.strip()
@@ -118,6 +142,8 @@ def run_daemon():
             super_resolve_file(in_path, out_path)
             sys.stdout.write(json.dumps({"status": "ok", "out": out_path}) + "\n")
         except Exception as e:
+            sys.stderr.write(f"[Swin2SR Error] {str(e)}\n")
+            sys.stderr.flush()
             sys.stdout.write(json.dumps({"status": "error", "error": str(e)}) + "\n")
         sys.stdout.flush()
 

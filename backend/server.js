@@ -34,6 +34,10 @@ app.get('/api/tiles/:band/:z/:x/:y.png', async (req, res) => {
       return res.status(400).json({ error: 'Invalid tile coordinates' });
     }
 
+    if (band === 'sr') {
+      console.log(`[Tile Request] >> Serving Swin2SR tile: z=${zoom}, x=${tileX}, y=${tileY}`);
+    }
+
     const tileBuffer = await getOrFetchTile(band, zoom, tileX, tileY);
 
     res.set({

@@ -54,7 +54,8 @@ function ensureDaemon() {
   });
 
   daemonProcess.stderr.on('data', (data) => {
-    console.warn(`[Swin2SR Daemon stderr]: ${data.toString()}`);
+    // Print real-time Swin2SR inference logs directly to the user's terminal
+    process.stdout.write(`\x1b[36m${data.toString()}\x1b[0m`);
   });
 
   daemonProcess.on('exit', (code) => {

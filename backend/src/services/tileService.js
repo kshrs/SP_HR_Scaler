@@ -345,6 +345,18 @@ async function getOrFetchTile(band, z, x, y) {
   // 3. Initiate async fetch & cache task
   const fetchPromise = (async () => {
     try {
+      if (bandKey === 'sr' || bandKey === 'swin2sr') {
+        // Step A: Ensure base RGB tile is fetched & cached
+        const rgbBuffer = await getOrFetchTile('rgb', z, x, y);
+        const rgbCachePath = getCacheFilePath('rgb', z, x, y);
+
+        // Step B: Run Swin2SR Super-Resolution inference via ONNX Runtime daemon
+        const { superResolveTileFile } = require('./swin2srService');
+        await superResolveTileFile(rgbCachePath, cachePath);
+
+        return fs.readFileSync(cachePath);
+      }
+
       // Step A: Fetch real online Sentinel-2 satellite tile
       const realSatelliteTile = await fetchOnlineSentinel2Tile(z, x, y);
 
@@ -355,7 +367,7 @@ async function getOrFetchTile(band, z, x, y) {
       fs.writeFileSync(cachePath, processedPng);
       return processedPng;
     } catch (err) {
-      console.error(`[Tile Fetch Error] Failed acquiring tile online (z=${z}, x=${x}, y=${y}):`, err.message);
+      console.error(`[Tile Fetch Error] Failed acquiring tile online (z=${z}, x=${x}, y=${y}, band=${bandKey}):`, err.message);
       throw err;
     } finally {
       activeFetches.delete(tileKey);

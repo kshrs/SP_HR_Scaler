@@ -128,6 +128,15 @@ app.get('/api/metadata', (req, res) => {
         description: 'Human-readable visual composite (B04 + B03 + B02)',
       },
       {
+        id: 'sr',
+        code: 'SR',
+        name: 'Swin2SR Super-Resolution',
+        resolution: '2.5m',
+        tilePattern: '/api/tiles/sr/{z}/{x}/{y}.png',
+        type: 'composite',
+        description: 'Deep Learning 4x Super-Resolution Enhanced Imagery (Swin2SR ONNX)',
+      },
+      {
         id: 'cir',
         code: 'CIR',
         name: 'Color Infrared (CIR)',

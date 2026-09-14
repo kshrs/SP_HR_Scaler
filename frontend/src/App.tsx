@@ -15,6 +15,15 @@ const INITIAL_BANDS: BandItem[] = [
     tilePattern: '/api/tiles/rgb/{z}/{x}/{y}.png',
   },
   {
+    id: 'sr',
+    code: 'SR',
+    name: 'Swin2SR Super-Res',
+    category: 'preset',
+    resolution: '2.5m',
+    description: '4x Deep Learning Super-Resolution',
+    tilePattern: '/api/tiles/sr/{z}/{x}/{y}.png',
+  },
+  {
     id: 'cir',
     code: 'CIR',
     name: 'False Color (Urban / IR)',
@@ -186,6 +195,7 @@ const AOI_CENTER: [number, number] = [11.962177, 78.448122];
 
 export const App: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
+  const [isSplitView, setIsSplitView] = useState<boolean>(false);
   const [bands, setBands] = useState<BandItem[]>(INITIAL_BANDS);
   const [activeBandId, setActiveBandId] = useState<string>('rgb');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -229,10 +239,12 @@ export const App: React.FC = () => {
 
   return (
     <div className="h-full w-full overflow-hidden text-slate-300 antialiased font-sans flex flex-col select-none bg-[#111315]">
-      {/* 1. Header with brand, search, sidebar toggle slider and recenter */}
+      {/* 1. Header with brand, search, sidebar toggle slider, Swin2SR split toggle and recenter */}
       <Header
         isSidebarOpen={isSidebarOpen}
         onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
+        isSplitView={isSplitView}
+        onToggleSplitView={() => setIsSplitView((prev) => !prev)}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         onRecenter={handleRecenter}
@@ -255,6 +267,7 @@ export const App: React.FC = () => {
           onPointerMove={setPointerCoords}
           center={center}
           zoom={zoom}
+          isSplitView={isSplitView}
         />
       </div>
     </div>

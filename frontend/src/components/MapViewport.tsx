@@ -14,6 +14,7 @@ interface MapViewportProps {
   onPointerMove: (coords: Coordinates) => void;
   center: [number, number];
   zoom: number;
+  isSplitView?: boolean;
 }
 
 // Helper component to track map movements, zoom level changes, and pointer events
@@ -71,12 +72,18 @@ export const MapViewport: React.FC<MapViewportProps> = ({
   onPointerMove,
   center,
   zoom,
+  isSplitView = false,
 }) => {
   const mapRef = useRef<L.Map | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const [currentZoom, setCurrentZoom] = useState<number>(zoom);
   const [centerTile, setCenterTile] = useState<TileCoordinates>({ x: 23524, y: 15287, z: 15 });
   const [elevation, setElevation] = useState<number | null>(null);
   const [isFetchingElevation, setIsFetchingElevation] = useState<boolean>(false);
+
+  // Split-screen movable separator position (percentage from 0 to 100)
+  const [splitPos, setSplitPos] = useState<number>(50);
+  const isDraggingSplitRef = useRef<boolean>(false);
 
   // Dynamically update elevation when pointer coordinates or map center changes
   useEffect(() => {
@@ -106,6 +113,28 @@ export const MapViewport: React.FC<MapViewportProps> = ({
     return () => clearTimeout(timer);
   }, [pointerCoords?.lat, pointerCoords?.lng, center]);
 
+  // Handle dragging the split slider separation
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDraggingSplitRef.current || !containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      const relativeX = e.clientX - rect.left;
+      const percentage = Math.max(5, Math.min(95, (relativeX / rect.width) * 100));
+      setSplitPos(percentage);
+    };
+
+    const handleMouseUp = () => {
+      isDraggingSplitRef.current = false;
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, []);
+
   const handleZoomIn = () => {
     mapRef.current?.zoomIn();
   };
@@ -134,12 +163,14 @@ export const MapViewport: React.FC<MapViewportProps> = ({
     return `${latDeg}°${latMin}'${latSec}"${latDir} ${lngDeg}°${lngMin}'${lngSec}"${lngDir}`;
   };
 
-  // Dynamic async tile pattern for the active band from the backend
-  const activeTileUrl = activeBand?.tilePattern || '/api/tiles/rgb/{z}/{x}/{y}.png';
+  // Dynamic async tile patterns for normal layer and Swin2SR layer
+  const baseTileUrl = activeBand?.tilePattern || '/api/tiles/rgb/{z}/{x}/{y}.png';
+  const srTileUrl = '/api/tiles/sr/{z}/{x}/{y}.png';
 
   return (
     <main
-      className="flex-1 relative bg-[#0f1113] overflow-hidden"
+      ref={containerRef}
+      className="flex-1 relative bg-[#0f1113] overflow-hidden select-none"
       data-purpose="geospatial-map-display"
     >
       {/* Interactive Leaflet Map Container */}
@@ -159,18 +190,70 @@ export const MapViewport: React.FC<MapViewportProps> = ({
           onCenterTileChange={setCenterTile}
         />
 
-
-        {/* Dynamic Async Sentinel-2 Tile Layer from Node Backend Cache */}
+        {/* 1. Normal / Base Tile Layer (Visible on Left side or Full screen) */}
         <TileLayer
           key={activeBand?.id || 'rgb'}
-          url={activeTileUrl}
-          opacity={0.92}
+          url={baseTileUrl}
+          opacity={0.96}
           maxZoom={18}
           minZoom={4}
           tileSize={256}
+          className="smooth-tiles"
         />
 
+        {/* 2. Swin2SR Super-Resolution Tile Layer (Visible on Right side when Split-View is active) */}
+        {isSplitView && (
+          <TileLayer
+            key="swin2sr-sr-layer"
+            url={srTileUrl}
+            opacity={1.0}
+            maxZoom={18}
+            minZoom={4}
+            tileSize={256}
+            className="swin2sr-layer smooth-tiles"
+          />
+        )}
       </MapContainer>
+
+      {/* Dynamic CSS Clip Path applied to Swin2SR Layer to restrict it to right side of divider */}
+      {isSplitView && (
+        <style>{`
+          .swin2sr-layer {
+            clip-path: polygon(${splitPos}% 0%, 100% 0%, 100% 100%, ${splitPos}% 100%) !important;
+          }
+        `}</style>
+      )}
+
+      {/* Movable Split Separation Line & Handle */}
+      {isSplitView && (
+        <div
+          style={{ left: `${splitPos}%` }}
+          className="absolute top-0 bottom-0 z-20 pointer-events-auto cursor-ew-resize flex items-center justify-center -ml-[2px]"
+          onMouseDown={(e) => {
+            e.preventDefault();
+            isDraggingSplitRef.current = true;
+          }}
+        >
+          {/* Vertical divider bar */}
+          <div className="w-[3px] h-full bg-[#00bcd4] shadow-[0_0_10px_rgba(0,188,212,0.8)]" />
+
+          {/* Central draggable handle badge */}
+          <div className="absolute w-8 h-8 rounded-full bg-[#181a1e] border-2 border-[#00bcd4] shadow-[0_0_12px_rgba(0,188,212,0.6)] flex items-center justify-center text-white cursor-ew-resize select-none">
+            <svg className="w-4 h-4 text-[#00bcd4]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 9l-4 3 4 3m8-6l4 3-4 3" />
+            </svg>
+          </div>
+
+          {/* Floating Left/Right Indicators */}
+          <div className="absolute top-4 -left-28 bg-[#141619]/90 border border-[#2b3036] px-2 py-1 rounded text-[10px] font-semibold text-slate-200 pointer-events-none shadow backdrop-blur-sm">
+            {activeBand ? activeBand.name : 'Original (10m)'}
+          </div>
+          <div className="absolute top-4 left-3 bg-[#141619]/90 border border-amber-400/50 px-2 py-1 rounded text-[10px] font-semibold text-amber-400 pointer-events-none shadow backdrop-blur-sm flex items-center space-x-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+            <span>Swin2SR 4x (2.5m)</span>
+          </div>
+        </div>
+      )}
 
       {/* Floating Canvas Controls */}
       <div className="absolute right-6 top-6 z-10 flex flex-col items-center space-y-2 pointer-events-auto">

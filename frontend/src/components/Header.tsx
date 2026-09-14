@@ -3,6 +3,8 @@ import React from 'react';
 interface HeaderProps {
   isSidebarOpen: boolean;
   onToggleSidebar: () => void;
+  isSplitView: boolean;
+  onToggleSplitView: () => void;
   searchQuery: string;
   onSearchChange: (q: string) => void;
   onRecenter: () => void;
@@ -11,6 +13,8 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({
   isSidebarOpen,
   onToggleSidebar,
+  isSplitView,
+  onToggleSplitView,
   searchQuery,
   onSearchChange,
   onRecenter,
@@ -53,6 +57,37 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Right Header Actions */}
       <div className="flex items-center space-x-6 text-xs text-[#7a828e] font-medium">
+        {/* Swin2SR Split-View Compare Slider Toggle Button */}
+        <div
+          className="flex items-center space-x-2 cursor-pointer select-none group"
+          onClick={onToggleSplitView}
+          title="Toggle Swin2SR Super-Resolution Split-Screen Comparison"
+        >
+          <span className="text-xs text-[#7a828e] group-hover:text-white transition-colors font-medium flex items-center space-x-1.5">
+            <span className={`w-2 h-2 rounded-full ${isSplitView ? 'bg-amber-400 animate-pulse' : 'bg-[#7a828e]'}`} />
+            <span>Swin2SR Split</span>
+          </span>
+          <button
+            aria-checked={isSplitView}
+            role="switch"
+            type="button"
+            className={`relative inline-flex h-5 w-10 flex-shrink-0 cursor-pointer rounded-full border p-0.5 transition-colors duration-200 ease-in-out focus:outline-none shadow-sm ${
+              isSplitView
+                ? 'border-amber-400/60 bg-amber-400/20'
+                : 'border-[#2b3038] bg-[#191c20]'
+            }`}
+            title="Toggle Swin2SR Comparison"
+          >
+            <span
+              className={`pointer-events-none inline-block h-3.5 w-3.5 transform rounded-full shadow transition-transform duration-200 ease-in-out ${
+                isSplitView
+                  ? 'translate-x-5 bg-amber-400'
+                  : 'translate-x-0 bg-[#7a828e]'
+              }`}
+            />
+          </button>
+        </div>
+
         {/* Sidebar toggle slider */}
         <div
           className="flex items-center space-x-2 cursor-pointer select-none group"

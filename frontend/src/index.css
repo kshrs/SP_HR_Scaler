@@ -50,3 +50,16 @@ html, body, #root {
 .leaflet-control-zoom {
   display: none !important;
 }
+
+/* Fix visible tile grid lines/gaps/seams caused by fractional pixel scaling */
+.leaflet-tile {
+  /* Prevent fractional subpixel rendering gaps between tiles */
+  outline: 1px solid transparent;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+.leaflet-tile-container img {
+  box-shadow: 0 0 1px rgba(0, 0, 0, 0.05);
+}
+

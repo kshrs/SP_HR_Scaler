@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   MapContainer,
   TileLayer,
+  Pane,
   useMap,
   useMapEvents,
 } from 'react-leaflet';
@@ -203,23 +204,27 @@ export const MapViewport: React.FC<MapViewportProps> = ({
 
         {/* 2. Swin2SR Super-Resolution Tile Layer (Visible on Right side when Split-View is active) */}
         {isSplitView && (
-          <TileLayer
-            key="swin2sr-sr-layer"
-            url={srTileUrl}
-            opacity={1.0}
-            maxZoom={18}
-            minZoom={4}
-            tileSize={256}
-            className="swin2sr-layer smooth-tiles"
-          />
+          <Pane name="swin2srPane" style={{ zIndex: 250 }}>
+            <TileLayer
+              key="swin2sr-sr-layer"
+              url={srTileUrl}
+              opacity={1.0}
+              maxZoom={18}
+              minZoom={4}
+              tileSize={256}
+              className="smooth-tiles"
+            />
+          </Pane>
         )}
       </MapContainer>
 
-      {/* Dynamic CSS Clip Path applied to Swin2SR Layer to restrict it to right side of divider */}
+      {/* Dynamic CSS Clip Path applied to Swin2SR Pane to restrict it to right side of divider */}
       {isSplitView && (
         <style>{`
-          .swin2sr-layer {
+          .leaflet-pane.leaflet-swin2srPane-pane {
             clip-path: polygon(${splitPos}% 0%, 100% 0%, 100% 100%, ${splitPos}% 100%) !important;
+            width: 100% !important;
+            height: 100% !important;
           }
         `}</style>
       )}

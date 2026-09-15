@@ -156,8 +156,14 @@ def super_resolve_tile(img_bytes, output_tile_size=(256, 256)):
     if sr_pil.size != output_tile_size:
         sr_pil = sr_pil.resize(output_tile_size, Image.Resampling.LANCZOS)
 
-    # Step 8: Subtle unsharp mask to recover any softening from the downscale
-    sr_pil = sr_pil.filter(ImageFilter.UnsharpMask(radius=0.6, percent=120, threshold=2))
+    # Step 8: Perceptual enhancement — enhance contrast and sharpness to bring out high-frequency structural details
+    enhancer_contrast = ImageEnhance.Contrast(sr_pil)
+    sr_pil = enhancer_contrast.enhance(1.12)
+
+    enhancer_sharpness = ImageEnhance.Sharpness(sr_pil)
+    sr_pil = enhancer_sharpness.enhance(1.35)
+
+    sr_pil = sr_pil.filter(ImageFilter.UnsharpMask(radius=1.2, percent=140, threshold=1))
 
     # Step 9: Encode to PNG
     buf = io.BytesIO()

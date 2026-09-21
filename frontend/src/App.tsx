@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Header, Sidebar, MapViewport } from './components';
-import type { BandItem, Coordinates } from './types';
+import type { BandItem, Coordinates, BoundingBox } from './types';
 
 // Default Sentinel-2 bands matching research/db/ and backend STAC
 const INITIAL_BANDS: BandItem[] = [
@@ -203,6 +203,12 @@ export const App: React.FC = () => {
   const [center, setCenter] = useState<[number, number]>(AOI_CENTER);
   const [zoom, setZoom] = useState<number>(15);
 
+  // GeoTIFF AOI Square Selection and Export states
+  const [isSelectingAoi, setIsSelectingAoi] = useState<boolean>(false);
+  const [selectedAoi, setSelectedAoi] = useState<BoundingBox | null>(null);
+  const [isExporting, setIsExporting] = useState<boolean>(false);
+  const [exportNotice, setExportNotice] = useState<{ message: string; isError?: boolean } | null>(null);
+
   // Sync band configuration dynamically from backend metadata
   useEffect(() => {
     fetch('/api/metadata')
@@ -237,9 +243,72 @@ export const App: React.FC = () => {
     setZoom(15);
   };
 
+  const handleToggleSelectAoi = () => {
+    setIsSelectingAoi((prev) => !prev);
+    if (!selectedAoi && !isSelectingAoi) {
+      // Default initial square AOI around map center (~1.6km square) if none selected yet
+      const side = 0.015;
+      setSelectedAoi({
+        west: center[1] - side / 2,
+        south: center[0] - side / 2,
+        east: center[1] + side / 2,
+        north: center[0] + side / 2,
+      });
+    }
+  };
+
+  const handleExportGeoTiff = async () => {
+    // If no AOI selected yet, default to a square centered around current center
+    let aoiToExport = selectedAoi;
+    if (!aoiToExport) {
+      const side = 0.015;
+      aoiToExport = {
+        west: center[1] - side / 2,
+        south: center[0] - side / 2,
+        east: center[1] + side / 2,
+        north: center[0] + side / 2,
+      };
+      setSelectedAoi(aoiToExport);
+    }
+
+    setIsExporting(true);
+    setExportNotice(null);
+
+    try {
+      const response = await fetch('/api/export-geotiff', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(aoiToExport),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || data.error) {
+        throw new Error(data.error || 'Export request failed');
+      }
+
+      setExportNotice({
+        message: `Successfully exported ${data.count} GeoTIFF bands to ~/Downloads/${data.folderName}`,
+        isError: false,
+      });
+      setIsSelectingAoi(false);
+    } catch (err: any) {
+      console.error('[Export Error]', err);
+      setExportNotice({
+        message: `Export failed: ${err.message}`,
+        isError: true,
+      });
+    } finally {
+      setIsExporting(false);
+      setTimeout(() => {
+        setExportNotice(null);
+      }, 7000);
+    }
+  };
+
   return (
     <div className="h-full w-full overflow-hidden text-slate-300 antialiased font-sans flex flex-col select-none bg-[#111315]">
-      {/* 1. Header with brand, search, sidebar toggle slider, Swin2SR split toggle and recenter */}
+      {/* 1. Header with brand, search, sidebar toggle slider, Swin2SR split toggle, GeoTIFF export and recenter */}
       <Header
         isSidebarOpen={isSidebarOpen}
         onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
@@ -248,7 +317,40 @@ export const App: React.FC = () => {
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         onRecenter={handleRecenter}
+        isSelectingAoi={isSelectingAoi}
+        onToggleSelectAoi={handleToggleSelectAoi}
+        onExportGeoTiff={handleExportGeoTiff}
+        hasSelectedAoi={Boolean(selectedAoi)}
+        isExporting={isExporting}
       />
+
+      {/* Floating Export Notification Toast */}
+      {exportNotice && (
+        <div
+          className={`absolute top-16 right-6 z-50 max-w-md px-4 py-3 rounded-lg shadow-2xl border backdrop-blur-md flex items-center space-x-3 text-xs transition-all ${
+            exportNotice.isError
+              ? 'bg-rose-950/90 border-rose-500/80 text-rose-200'
+              : 'bg-[#141619]/95 border-emerald-500/80 text-emerald-200'
+          }`}
+        >
+          {exportNotice.isError ? (
+            <svg className="w-5 h-5 text-rose-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          ) : (
+            <svg className="w-5 h-5 text-emerald-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          )}
+          <span className="font-medium">{exportNotice.message}</span>
+          <button
+            onClick={() => setExportNotice(null)}
+            className="text-slate-400 hover:text-white ml-auto cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* 2. Main Content Area: Sidebar + Interactive Leaflet Map with Async Slippy Tiles */}
       <div className="flex-1 flex overflow-hidden relative" data-purpose="viewport-container">
@@ -268,6 +370,9 @@ export const App: React.FC = () => {
           center={center}
           zoom={zoom}
           isSplitView={isSplitView}
+          isSelectingAoi={isSelectingAoi}
+          selectedAoi={selectedAoi}
+          onSelectAoi={setSelectedAoi}
         />
       </div>
     </div>

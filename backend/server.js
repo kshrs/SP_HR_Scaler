@@ -76,6 +76,39 @@ app.get('/api/tile-at', (req, res) => {
   });
 });
 
+/**
+ * GeoTIFF AOI Export Endpoint:
+ * POST /api/export-geotiff
+ * Body: { west: number, south: number, east: number, north: number }
+ * Downloads full Sentinel-2 dataset for all bands to ~/Downloads/Sentinel2_AOI_<timestamp>/
+ */
+const { exportAoiGeoTiffs } = require('./src/services/geotiffExportService');
+
+app.post('/api/export-geotiff', async (req, res) => {
+  try {
+    const { west, south, east, north } = req.body || {};
+
+    if (
+      typeof west !== 'number' || typeof south !== 'number' ||
+      typeof east !== 'number' || typeof north !== 'number'
+    ) {
+      return res.status(400).json({ error: 'Valid bbox coordinates (west, south, east, north) required.' });
+    }
+
+    const bbox = { west, south, east, north };
+    const result = await exportAoiGeoTiffs(bbox);
+
+    res.json({
+      success: true,
+      message: `Exported ${result.count} GeoTIFF bands to ${result.targetDir}`,
+      ...result,
+    });
+  } catch (err) {
+    console.error('[Export API Error]', err.message);
+    res.status(500).json({ error: err.message || 'GeoTIFF export failed.' });
+  }
+});
+
 // Elevation cache to prevent hammering the elevation API
 const elevationCache = new Map();
 

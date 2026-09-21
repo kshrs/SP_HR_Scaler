@@ -3,11 +3,12 @@ import {
   MapContainer,
   TileLayer,
   Pane,
+  Rectangle,
   useMap,
   useMapEvents,
 } from 'react-leaflet';
 import L from 'leaflet';
-import type { BandItem, Coordinates, TileCoordinates } from '../types';
+import type { BandItem, Coordinates, TileCoordinates, BoundingBox } from '../types';
 
 interface MapViewportProps {
   activeBand: BandItem | null;
@@ -16,6 +17,9 @@ interface MapViewportProps {
   center: [number, number];
   zoom: number;
   isSplitView?: boolean;
+  isSelectingAoi?: boolean;
+  selectedAoi: BoundingBox | null;
+  onSelectAoi: (bbox: BoundingBox) => void;
 }
 
 // Helper component to track map movements, zoom level changes, and pointer events
@@ -67,6 +71,92 @@ const MapController: React.FC<{ center: [number, number]; zoom: number }> = ({
   return null;
 };
 
+// Square AOI selector: allows clicking & dragging or clicking on map to draw a strict square AOI
+const AoiSquareSelector: React.FC<{
+  isSelecting: boolean;
+  onAoiSelected: (bbox: BoundingBox) => void;
+}> = ({ isSelecting, onAoiSelected }) => {
+  const map = useMap();
+  const startPointRef = useRef<L.LatLng | null>(null);
+  const isDraggingRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    if (!isSelecting) {
+      map.dragging.enable();
+      return;
+    }
+
+    // Disable default map pan dragging while in AOI selection mode
+    map.dragging.disable();
+
+    const onMouseDown = (e: L.LeafletMouseEvent) => {
+      startPointRef.current = e.latlng;
+      isDraggingRef.current = true;
+    };
+
+    const onMouseMove = (e: L.LeafletMouseEvent) => {
+      if (!isDraggingRef.current || !startPointRef.current) return;
+      const p1 = startPointRef.current;
+      const p2 = e.latlng;
+
+      // Force strictly square dimensions: equalize deltaLat and deltaLng
+      const dLat = Math.abs(p2.lat - p1.lat);
+      const dLng = Math.abs(p2.lng - p1.lng);
+      const side = Math.max(dLat, dLng);
+
+      const latSign = p2.lat >= p1.lat ? 1 : -1;
+      const lngSign = p2.lng >= p1.lng ? 1 : -1;
+
+      const p2SquareLat = p1.lat + latSign * side;
+      const p2SquareLng = p1.lng + lngSign * side;
+
+      const south = Math.min(p1.lat, p2SquareLat);
+      const north = Math.max(p1.lat, p2SquareLat);
+      const west = Math.min(p1.lng, p2SquareLng);
+      const east = Math.max(p1.lng, p2SquareLng);
+
+      onAoiSelected({ west, south, east, north });
+    };
+
+    const onMouseUp = (e: L.LeafletMouseEvent) => {
+      if (isDraggingRef.current && startPointRef.current) {
+        const p1 = startPointRef.current;
+        const p2 = e.latlng;
+        let dLat = Math.abs(p2.lat - p1.lat);
+        let dLng = Math.abs(p2.lng - p1.lng);
+        let side = Math.max(dLat, dLng);
+
+        // If it was just a click without dragging, default to a sensible square AOI (~2km around point)
+        if (side < 0.002) {
+          side = 0.015; // ~1.6 km square
+        }
+
+        const south = p1.lat - side / 2;
+        const north = p1.lat + side / 2;
+        const west = p1.lng - side / 2;
+        const east = p1.lng + side / 2;
+
+        onAoiSelected({ west, south, east, north });
+      }
+      isDraggingRef.current = false;
+      startPointRef.current = null;
+    };
+
+    map.on('mousedown', onMouseDown);
+    map.on('mousemove', onMouseMove);
+    map.on('mouseup', onMouseUp);
+
+    return () => {
+      map.dragging.enable();
+      map.off('mousedown', onMouseDown);
+      map.off('mousemove', onMouseMove);
+      map.off('mouseup', onMouseUp);
+    };
+  }, [isSelecting, map, onAoiSelected]);
+
+  return null;
+};
+
 export const MapViewport: React.FC<MapViewportProps> = ({
   activeBand,
   pointerCoords,
@@ -74,6 +164,9 @@ export const MapViewport: React.FC<MapViewportProps> = ({
   center,
   zoom,
   isSplitView = false,
+  isSelectingAoi = false,
+  selectedAoi,
+  onSelectAoi,
 }) => {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -216,7 +309,42 @@ export const MapViewport: React.FC<MapViewportProps> = ({
             />
           </Pane>
         )}
+
+        {/* 3. Interactive Square AOI Selection Controller */}
+        <AoiSquareSelector isSelecting={isSelectingAoi} onAoiSelected={onSelectAoi} />
+
+        {/* 4. Render Selected Square AOI Bounding Box */}
+        {selectedAoi && (
+          <Rectangle
+            bounds={[
+              [selectedAoi.south, selectedAoi.west],
+              [selectedAoi.north, selectedAoi.east],
+            ]}
+            pathOptions={{
+              color: '#00bcd4',
+              weight: 2,
+              fillColor: '#00bcd4',
+              fillOpacity: 0.15,
+              dashArray: isSelectingAoi ? '4, 4' : undefined,
+            }}
+          />
+        )}
       </MapContainer>
+
+      {/* AOI Selection Guide Banner overlay */}
+      {isSelectingAoi && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 bg-[#141619]/95 border border-[#00bcd4]/70 px-4 py-2 rounded-lg shadow-xl backdrop-blur-md flex items-center space-x-3 text-xs text-white">
+          <span className="w-2.5 h-2.5 rounded-full bg-[#00bcd4] animate-ping" />
+          <span>
+            Click or drag anywhere on the map to define a <strong>Square AOI</strong> for GeoTIFF export
+          </span>
+          {selectedAoi && (
+            <span className="text-emerald-400 font-mono text-[11px] bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30">
+              Square AOI Ready
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Dynamic CSS Clip Path applied to Swin2SR Pane to restrict it to right side of divider */}
       {isSplitView && (

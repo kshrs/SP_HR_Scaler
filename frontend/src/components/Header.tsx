@@ -8,6 +8,11 @@ interface HeaderProps {
   searchQuery: string;
   onSearchChange: (q: string) => void;
   onRecenter: () => void;
+  isSelectingAoi: boolean;
+  onToggleSelectAoi: () => void;
+  onExportGeoTiff: () => void;
+  hasSelectedAoi: boolean;
+  isExporting: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -18,6 +23,11 @@ export const Header: React.FC<HeaderProps> = ({
   searchQuery,
   onSearchChange,
   onRecenter,
+  isSelectingAoi,
+  onToggleSelectAoi,
+  onExportGeoTiff,
+  hasSelectedAoi,
+  isExporting,
 }) => {
   return (
     <header
@@ -56,7 +66,57 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Right Header Actions */}
-      <div className="flex items-center space-x-6 text-xs text-[#7a828e] font-medium">
+      <div className="flex items-center space-x-5 text-xs text-[#7a828e] font-medium">
+        {/* GeoTIFF Square AOI Selector & Export Buttons */}
+        <div className="flex items-center space-x-2 bg-[#191c20] border border-[#2b3036] p-1 rounded-md shadow-sm">
+          <button
+            type="button"
+            onClick={onToggleSelectAoi}
+            className={`flex items-center space-x-1.5 px-2.5 py-1 rounded text-xs transition-colors cursor-pointer ${
+              isSelectingAoi
+                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/50'
+                : hasSelectedAoi
+                ? 'bg-[#22272d] text-emerald-300 border border-emerald-500/30'
+                : 'text-slate-300 hover:text-white hover:bg-[#22272d]'
+            }`}
+            title="Select a square Area of Interest (AOI) on the map"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <rect x="3" y="3" width="18" height="18" rx="2" strokeWidth="2" strokeDasharray={isSelectingAoi ? "3 3" : undefined} />
+            </svg>
+            <span>{isSelectingAoi ? 'Selecting AOI...' : hasSelectedAoi ? 'Square AOI' : 'Select AOI'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={onExportGeoTiff}
+            disabled={isExporting}
+            className={`flex items-center space-x-1.5 px-3 py-1 rounded text-xs font-medium transition-colors shadow-sm cursor-pointer ${
+              isExporting
+                ? 'bg-cyan-600/40 text-cyan-200 cursor-not-allowed animate-pulse'
+                : 'bg-[#00bcd4] hover:bg-[#00acc1] text-[#111315] font-semibold'
+            }`}
+            title="Export all Sentinel-2 bands as GeoTIFF to Downloads folder"
+          >
+            {isExporting ? (
+              <>
+                <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                </svg>
+                <span>Exporting...</span>
+              </>
+            ) : (
+              <>
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                <span>Export GeoTIFF</span>
+              </>
+            )}
+          </button>
+        </div>
+
         {/* Swin2SR Split-View Compare Slider Toggle Button */}
         <div
           className="flex items-center space-x-2 cursor-pointer select-none group"

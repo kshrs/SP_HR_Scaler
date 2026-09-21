@@ -244,17 +244,20 @@ export const App: React.FC = () => {
   };
 
   const handleToggleSelectAoi = () => {
-    setIsSelectingAoi((prev) => !prev);
-    if (!selectedAoi && !isSelectingAoi) {
-      // Default initial square AOI around map center (~1.6km square) if none selected yet
-      const side = 0.015;
-      setSelectedAoi({
-        west: center[1] - side / 2,
-        south: center[0] - side / 2,
-        east: center[1] + side / 2,
-        north: center[0] + side / 2,
-      });
-    }
+    setIsSelectingAoi((prev) => {
+      const next = !prev;
+      // If turning ON and no AOI exists yet, set a sensible default square around center
+      if (next && !selectedAoi) {
+        const side = 0.015;
+        setSelectedAoi({
+          west: center[1] - side / 2,
+          south: center[0] - side / 2,
+          east: center[1] + side / 2,
+          north: center[0] + side / 2,
+        });
+      }
+      return next;
+    });
   };
 
   const handleExportGeoTiff = async () => {

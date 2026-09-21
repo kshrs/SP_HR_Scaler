@@ -67,25 +67,36 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Right Header Actions */}
       <div className="flex items-center space-x-5 text-xs text-[#7a828e] font-medium">
-        {/* GeoTIFF Square AOI Selector & Export Buttons */}
+        {/* GeoTIFF Square AOI Selector Toggle & Export Buttons */}
         <div className="flex items-center space-x-2 bg-[#191c20] border border-[#2b3036] p-1 rounded-md shadow-sm">
-          <button
-            type="button"
+          {/* Square AOI Push-Button Toggle */}
+          <div
+            className="flex items-center space-x-2 px-2 py-1 rounded cursor-pointer select-none group hover:bg-[#22272d] transition-colors"
             onClick={onToggleSelectAoi}
-            className={`flex items-center space-x-1.5 px-2.5 py-1 rounded text-xs transition-colors cursor-pointer ${
-              isSelectingAoi
-                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/50'
-                : hasSelectedAoi
-                ? 'bg-[#22272d] text-emerald-300 border border-emerald-500/30'
-                : 'text-slate-300 hover:text-white hover:bg-[#22272d]'
-            }`}
-            title="Select a square Area of Interest (AOI) on the map"
+            title={isSelectingAoi ? "Click to turn off Square AOI selection" : "Click to activate Square AOI selection"}
           >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <rect x="3" y="3" width="18" height="18" rx="2" strokeWidth="2" strokeDasharray={isSelectingAoi ? "3 3" : undefined} />
-            </svg>
-            <span>{isSelectingAoi ? 'Selecting AOI...' : hasSelectedAoi ? 'Square AOI' : 'Select AOI'}</span>
-          </button>
+            <span className={`text-xs font-medium transition-colors ${isSelectingAoi ? 'text-emerald-400' : hasSelectedAoi ? 'text-slate-200' : 'text-[#7a828e] group-hover:text-white'}`}>
+              Square AOI
+            </span>
+            <button
+              aria-checked={isSelectingAoi}
+              role="switch"
+              type="button"
+              className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border p-0.5 transition-colors duration-200 ease-in-out focus:outline-none shadow-sm ${
+                isSelectingAoi
+                  ? 'border-emerald-500/60 bg-emerald-500/25'
+                  : 'border-[#2b3038] bg-[#141619]'
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-3.5 w-3.5 transform rounded-full shadow transition-transform duration-200 ease-in-out ${
+                  isSelectingAoi
+                    ? 'translate-x-4 bg-emerald-400'
+                    : 'translate-x-0 bg-[#7a828e]'
+                }`}
+              />
+            </button>
+          </div>
 
           <button
             type="button"

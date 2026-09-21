@@ -246,8 +246,11 @@ export const App: React.FC = () => {
   const handleToggleSelectAoi = () => {
     setIsSelectingAoi((prev) => {
       const next = !prev;
-      // If turning ON and no AOI exists yet, set a sensible default square around center
-      if (next && !selectedAoi) {
+      if (!next) {
+        // When toggle is turned OFF, clear the AOI square completely
+        setSelectedAoi(null);
+      } else if (!selectedAoi) {
+        // When turning ON and no AOI exists yet, set a sensible default square around center
         const side = 0.015;
         setSelectedAoi({
           west: center[1] - side / 2,

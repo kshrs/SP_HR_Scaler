@@ -72,6 +72,7 @@ const MapController: React.FC<{ center: [number, number]; zoom: number }> = ({
 };
 
 // Square AOI selector: allows clicking & dragging or clicking on map to draw a strict square AOI
+// Holding the Spacebar temporarily switches into pan mode while in AOI selection mode
 const AoiSquareSelector: React.FC<{
   isSelecting: boolean;
   onAoiSelected: (bbox: BoundingBox) => void;
@@ -79,23 +80,58 @@ const AoiSquareSelector: React.FC<{
   const map = useMap();
   const startPointRef = useRef<L.LatLng | null>(null);
   const isDraggingRef = useRef<boolean>(false);
+  const isSpacePressedRef = useRef<boolean>(false);
 
   useEffect(() => {
     if (!isSelecting) {
       map.dragging.enable();
+      const container = map.getContainer();
+      container.style.cursor = '';
       return;
     }
 
-    // Disable default map pan dragging while in AOI selection mode
-    map.dragging.disable();
+    const container = map.getContainer();
+
+    const updateMapInteractionMode = () => {
+      if (isSpacePressedRef.current) {
+        map.dragging.enable();
+        container.style.cursor = 'grab';
+      } else {
+        map.dragging.disable();
+        container.style.cursor = 'crosshair';
+      }
+    };
+
+    updateMapInteractionMode();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Space' && !e.repeat) {
+        // Prevent default window page scroll on spacebar
+        e.preventDefault();
+        isSpacePressedRef.current = true;
+        // If user was drawing an AOI, cancel current draw so it doesn't get messed up
+        isDraggingRef.current = false;
+        startPointRef.current = null;
+        updateMapInteractionMode();
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        e.preventDefault();
+        isSpacePressedRef.current = false;
+        updateMapInteractionMode();
+      }
+    };
 
     const onMouseDown = (e: L.LeafletMouseEvent) => {
+      if (isSpacePressedRef.current) return;
       startPointRef.current = e.latlng;
       isDraggingRef.current = true;
     };
 
     const onMouseMove = (e: L.LeafletMouseEvent) => {
-      if (!isDraggingRef.current || !startPointRef.current) return;
+      if (isSpacePressedRef.current || !isDraggingRef.current || !startPointRef.current) return;
       const p1 = startPointRef.current;
       const p2 = e.latlng;
 
@@ -119,6 +155,7 @@ const AoiSquareSelector: React.FC<{
     };
 
     const onMouseUp = (e: L.LeafletMouseEvent) => {
+      if (isSpacePressedRef.current) return;
       if (isDraggingRef.current && startPointRef.current) {
         const p1 = startPointRef.current;
         const p2 = e.latlng;
@@ -126,7 +163,7 @@ const AoiSquareSelector: React.FC<{
         let dLng = Math.abs(p2.lng - p1.lng);
         let side = Math.max(dLat, dLng);
 
-        // If it was just a click without dragging, default to a sensible square AOI (~2km around point)
+        // If it was just a click without dragging, default to a sensible square AOI (~1.6km square)
         if (side < 0.002) {
           side = 0.015; // ~1.6 km square
         }
@@ -142,12 +179,17 @@ const AoiSquareSelector: React.FC<{
       startPointRef.current = null;
     };
 
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
     map.on('mousedown', onMouseDown);
     map.on('mousemove', onMouseMove);
     map.on('mouseup', onMouseUp);
 
     return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
       map.dragging.enable();
+      container.style.cursor = '';
       map.off('mousedown', onMouseDown);
       map.off('mousemove', onMouseMove);
       map.off('mouseup', onMouseUp);
@@ -336,7 +378,7 @@ export const MapViewport: React.FC<MapViewportProps> = ({
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 bg-[#141619]/95 border border-[#00bcd4]/70 px-4 py-2 rounded-lg shadow-xl backdrop-blur-md flex items-center space-x-3 text-xs text-white">
           <span className="w-2.5 h-2.5 rounded-full bg-[#00bcd4] animate-ping" />
           <span>
-            Click or drag anywhere on the map to define a <strong>Square AOI</strong> for GeoTIFF export
+            Click or drag to select a <strong>Square AOI</strong> &bull; Hold <kbd className="bg-[#22272d] border border-slate-600 px-1.5 py-0.5 rounded text-[10px] font-mono text-cyan-300">Space</kbd> to Pan
           </span>
           {selectedAoi && (
             <span className="text-emerald-400 font-mono text-[11px] bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30">

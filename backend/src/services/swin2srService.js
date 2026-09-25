@@ -10,6 +10,13 @@ let daemonProcess = null;
 let daemonReady = false;
 let pendingQueue = [];
 let activeTask = null;
+let hardwareStatus = {
+  ready: false,
+  mode: 'detecting',
+  provider: 'Pending detection...',
+  device: 'Probing hardware...',
+  hardware: null,
+};
 
 function ensureDaemon() {
   if (daemonProcess && !daemonProcess.killed) {
@@ -32,12 +39,24 @@ function ensureDaemon() {
       const msg = JSON.parse(line.trim());
       if (msg.status === 'ready') {
         daemonReady = true;
+        hardwareStatus = {
+          ready: true,
+          mode: msg.mode || 'cpu',
+          provider: msg.provider || 'CPUExecutionProvider',
+          device: msg.device || 'System Processor',
+          hardware: msg.hardware || null,
+        };
+        console.log(`[Swin2SR Service] Daemon online. Mode: ${hardwareStatus.mode.toUpperCase()} (${hardwareStatus.provider}) on ${hardwareStatus.device}`);
         processNext();
       } else if (activeTask) {
         const { resolve, reject } = activeTask;
         activeTask = null;
         if (msg.status === 'ok') {
-          resolve(msg.out);
+          resolve({
+            outPath: msg.out,
+            provider: msg.provider || hardwareStatus.provider,
+            mode: msg.mode || hardwareStatus.mode,
+          });
         } else {
           reject(new Error(msg.error || 'Daemon inference error'));
         }
@@ -62,6 +81,7 @@ function ensureDaemon() {
     console.warn(`[Swin2SR Daemon] Exited with code ${code}`);
     daemonProcess = null;
     daemonReady = false;
+    hardwareStatus.ready = false;
     if (activeTask) {
       activeTask.reject(new Error(`Swin2SR daemon exited unexpectedly with code ${code}`));
       activeTask = null;
@@ -97,6 +117,13 @@ function superResolveTileFile(inPath, outPath) {
   });
 }
 
+function getHardwareStatus() {
+  ensureDaemon();
+  return { ...hardwareStatus };
+}
+
 module.exports = {
   superResolveTileFile,
+  getHardwareStatus,
+  ensureDaemon,
 };

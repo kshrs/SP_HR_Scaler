@@ -29,6 +29,19 @@ export const Header: React.FC<HeaderProps> = ({
   hasSelectedAoi,
   isExporting,
 }) => {
+  const [srStatus, setSrStatus] = React.useState<{
+    mode?: string;
+    provider?: string;
+    device?: string;
+  } | null>(null);
+
+  React.useEffect(() => {
+    fetch('/api/swin2sr/status')
+      .then((r) => r.json())
+      .then((data) => setSrStatus(data))
+      .catch(() => {});
+  }, []);
+
   return (
     <header
       className="h-14 bg-[#141619] border-b border-[#22272d] flex items-center justify-between px-4 z-30 flex-shrink-0 select-none"
@@ -137,6 +150,18 @@ export const Header: React.FC<HeaderProps> = ({
           <span className="text-xs text-[#7a828e] group-hover:text-white transition-colors font-medium flex items-center space-x-1.5">
             <span className={`w-2 h-2 rounded-full ${isSplitView ? 'bg-amber-400 animate-pulse' : 'bg-[#7a828e]'}`} />
             <span>Swin2SR Split</span>
+            {srStatus && srStatus.mode && (
+              <span
+                className={`text-[9px] px-1 py-0.5 rounded font-mono uppercase font-semibold transition-colors ${
+                  srStatus.mode === 'gpu'
+                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                    : 'bg-[#2b3036] text-slate-400 border border-[#3b4149]'
+                }`}
+                title={`Acceleration: ${srStatus.mode.toUpperCase()} (${srStatus.provider})\nDevice: ${srStatus.device}`}
+              >
+                {srStatus.mode}
+              </span>
+            )}
           </span>
           <button
             aria-checked={isSplitView}

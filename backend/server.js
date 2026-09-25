@@ -35,7 +35,14 @@ app.get('/api/tiles/:band/:z/:x/:y.png', async (req, res) => {
     }
 
     if (band === 'sr') {
-      console.log(`[Tile Request] >> Serving Swin2SR tile: z=${zoom}, x=${tileX}, y=${tileY}`);
+      const { getHardwareStatus } = require('./src/services/swin2srService');
+      const hw = getHardwareStatus();
+      if (hw.provider) {
+        res.set('X-SR-Provider', hw.provider);
+        res.set('X-SR-Mode', hw.mode);
+        res.set('X-SR-Device', hw.device);
+      }
+      console.log(`[Tile Request] >> Serving Swin2SR tile: z=${zoom}, x=${tileX}, y=${tileY} [${(hw.mode || 'cpu').toUpperCase()}: ${hw.provider || 'CPU'}]`);
     }
 
     const tileBuffer = await getOrFetchTile(band, zoom, tileX, tileY);
@@ -333,6 +340,16 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', time: new Date().toISOString() });
 });
 
+// Swin2SR Hardware & Acceleration Status endpoint
+const { getHardwareStatus, ensureDaemon } = require('./src/services/swin2srService');
+
+app.get('/api/swin2sr/status', (req, res) => {
+  res.json(getHardwareStatus());
+});
+
 app.listen(PORT, () => {
   console.log(`Node backend running on http://localhost:${PORT}`);
+  // Bootstrap Swin2SR acceleration daemon in background to detect GPU / CPU hardware
+  ensureDaemon();
 });
+

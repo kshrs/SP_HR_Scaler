@@ -4,8 +4,12 @@ DiffFuSR (Diffusion-based Super-Resolution) Engine
 Runs 4x super-resolution on Sentinel-2 satellite tiles using the DiffFuSR
 WorldStrat diffusion model (logs/blindsrsnf_aniso_worldstrat_degraded_harmfac_10000_large/version_7).
 
-Takes 256x256 input tiles, performs diffusion super-resolution to 1024x1024,
-and downsamples to 256x256 for map tile rendering with high-frequency structural detail.
+Hardware Acceleration:
+  - Dynamically detects available GPU hardware (dedicated and integrated graphics).
+  - Automatically utilizes GPU (CUDA, Apple MPS, ROCm) for accelerated diffusion sampling.
+  - Automatically reverts to CPU rendering only when no GPU hardware/driver is functional,
+    applying multi-threaded tensor optimizations.
+  - Features real-time GPU failover to CPU if device memory or CUDA errors occur during inference.
 
 Modes:
   1. CLI file:     python difffusr_inference.py input.png output.png
@@ -18,8 +22,10 @@ import os
 import io
 import time
 import json
+import glob
 import types
 import argparse
+import subprocess
 import importlib.util
 import numpy as np
 from PIL import Image
@@ -78,6 +84,107 @@ from litsr.utils.registry import ModelRegistry, ArchRegistry
 
 _model = None
 _device = None
+_mode = "cpu"
+_device_name = "CPU"
+_detected_hardware = None
+
+
+def detect_hardware():
+    """
+    Detects dedicated and internal/integrated graphics hardware and available PyTorch devices.
+    Returns a structured dictionary summarizing detected hardware.
+    """
+    global _detected_hardware
+    if _detected_hardware is not None:
+        return _detected_hardware
+
+    devices = []
+    has_dedicated = False
+    has_integrated = False
+    lspci_names = []
+
+    # 1. Inspect Linux DRM / DRI devices
+    try:
+        for card in sorted(glob.glob('/sys/class/drm/card[0-9]*')):
+            dev_path = os.path.join(card, 'device')
+            vendor_file = os.path.join(dev_path, 'vendor')
+            device_file = os.path.join(dev_path, 'device')
+            if os.path.exists(vendor_file):
+                with open(vendor_file, 'r', encoding='utf-8') as f:
+                    vendor_id = f.read().strip().lower()
+                with open(device_file, 'r', encoding='utf-8') as f:
+                    device_id = f.read().strip().lower()
+
+                vendor_map = {
+                    '0x10de': ('NVIDIA', 'dedicated'),
+                    '0x1002': ('AMD', 'integrated/discrete'),
+                    '0x8086': ('Intel', 'integrated'),
+                }
+                vendor_name, gpu_class = vendor_map.get(vendor_id, ('Unknown', 'gpu'))
+                if vendor_id == '0x10de':
+                    has_dedicated = True
+                    gpu_class = 'dedicated'
+                elif vendor_id == '0x8086':
+                    has_integrated = True
+                    gpu_class = 'integrated'
+
+                devices.append({
+                    'source': 'drm',
+                    'card': os.path.basename(card),
+                    'vendor': vendor_name,
+                    'vendor_id': vendor_id,
+                    'device_id': device_id,
+                    'class': gpu_class
+                })
+    except Exception as e:
+        sys.stderr.write(f"[DiffFuSR HW] Warning during DRM scan: {e}\n")
+
+    # 2. Inspect lspci output
+    try:
+        lspci_out = subprocess.check_output(['lspci'], text=True, stderr=subprocess.DEVNULL)
+        for line in lspci_out.splitlines():
+            line_lower = line.lower()
+            if any(k in line_lower for k in ['vga compatible controller', '3d controller', 'display controller']):
+                desc = line.split(': ', 1)[-1].strip() if ': ' in line else line
+                lspci_names.append(desc)
+                if 'nvidia' in desc.lower():
+                    has_dedicated = True
+                elif 'intel' in desc.lower():
+                    if 'arc' in desc.lower():
+                        has_dedicated = True
+                    else:
+                        has_integrated = True
+                elif 'amd' in desc.lower() or 'radeon' in desc.lower():
+                    if 'graphics' in desc.lower() and ('ryzen' in desc.lower() or 'apu' in desc.lower()):
+                        has_integrated = True
+                    else:
+                        has_dedicated = True
+    except Exception:
+        pass
+
+    # 3. Check PyTorch CUDA / MPS
+    cuda_devices = []
+    if torch.cuda.is_available():
+        has_dedicated = True
+        for i in range(torch.cuda.device_count()):
+            d_name = torch.cuda.get_device_name(i)
+            cuda_devices.append(d_name)
+            devices.append({'source': 'torch_cuda', 'name': d_name, 'class': 'dedicated'})
+    elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+        has_integrated = True
+        devices.append({'source': 'torch_mps', 'name': 'Apple Silicon Metal GPU', 'class': 'integrated'})
+
+    _detected_hardware = {
+        'has_gpu': has_dedicated or has_integrated or len(devices) > 0 or len(lspci_names) > 0,
+        'has_dedicated_gpu': has_dedicated,
+        'has_integrated_gpu': has_integrated,
+        'devices': devices,
+        'lspci_descriptions': lspci_names,
+        'cuda_available': torch.cuda.is_available(),
+        'cuda_devices': cuda_devices,
+        'mps_available': hasattr(torch.backends, 'mps') and torch.backends.mps.is_available(),
+    }
+    return _detected_hardware
 
 
 def register_all_modules():
@@ -106,17 +213,72 @@ def register_all_modules():
                             pass
 
 
-def get_model():
-    """Lazy loader for the DiffFuSR diffusion model."""
-    global _model, _device
-    if _model is not None:
+def get_model(force_cpu=False):
+    """
+    Lazy loader for the DiffFuSR diffusion model.
+    Utilizes GPU (CUDA/MPS) if available; automatically reverts to CPU rendering
+    only when no GPU is present or when GPU initialization fails.
+    """
+    global _model, _device, _mode, _device_name
+    if _model is not None and not force_cpu:
         return _model, _device
 
     register_all_modules()
+    hw = detect_hardware()
 
-    _device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    sys.stderr.write(f"[DiffFuSR] Using Device: {_device}\n")
+    hardware_desc = ", ".join(hw['lspci_descriptions']) if hw['lspci_descriptions'] else "Unknown Device"
+
+    sys.stderr.write(
+        f"[DiffFuSR HW] Hardware Scan: dedicated_gpu={hw['has_dedicated_gpu']}, "
+        f"integrated_gpu={hw['has_integrated_gpu']}, device=\"{hardware_desc}\"\n"
+        f"[DiffFuSR HW] PyTorch CUDA available: {hw['cuda_available']}, MPS available: {hw['mps_available']}\n"
+    )
     sys.stderr.flush()
+
+    # Step 1: Attempt GPU execution (CUDA or Apple MPS)
+    selected_device = None
+    if not force_cpu:
+        if hw['cuda_available']:
+            try:
+                selected_device = torch.device("cuda:0")
+                torch.backends.cudnn.benchmark = True
+                _mode = "gpu"
+                _device_name = torch.cuda.get_device_name(0)
+                sys.stderr.write(f"[DiffFuSR HW] ✓ GPU Acceleration ACTIVE: Using CUDA on {_device_name}\n")
+                sys.stderr.flush()
+            except Exception as e:
+                sys.stderr.write(f"[DiffFuSR HW] Failed to initialize CUDA: {e}\n")
+                selected_device = None
+
+        elif hw['mps_available']:
+            try:
+                selected_device = torch.device("mps")
+                _mode = "gpu"
+                _device_name = "Apple Silicon Metal GPU"
+                sys.stderr.write(f"[DiffFuSR HW] ✓ GPU Acceleration ACTIVE: Using Apple Metal GPU\n")
+                sys.stderr.flush()
+            except Exception as e:
+                sys.stderr.write(f"[DiffFuSR HW] Failed to initialize MPS: {e}\n")
+                selected_device = None
+
+    # Step 2: Revert to CPU rendering if no GPU device was initialized
+    if selected_device is None:
+        selected_device = torch.device("cpu")
+        _mode = "cpu"
+        num_threads = min(8, os.cpu_count() or 4)
+        torch.set_num_threads(num_threads)
+        _device_name = f"CPU ({os.cpu_count()} cores)"
+
+        if hw['has_gpu']:
+            reason = f"GPU hardware detected ({hardware_desc}), but PyTorch GPU driver/runtime is not enabled in environment"
+            sys.stderr.write(f"[DiffFuSR HW] Notice: {reason}.\n")
+            sys.stderr.write(f"[DiffFuSR HW] Reverting to CPU rendering with multi-threaded optimizations ({num_threads} threads).\n")
+        else:
+            reason = "No dedicated or integrated GPU detected on host"
+            sys.stderr.write(f"[DiffFuSR HW] {reason}. Reverting to CPU rendering ({num_threads} threads).\n")
+        sys.stderr.flush()
+
+    _device = selected_device
 
     if not os.path.exists(CKPT_PATH):
         raise FileNotFoundError(f"[DiffFuSR] Checkpoint not found at: {CKPT_PATH}")
@@ -126,14 +288,17 @@ def get_model():
     if not os.path.exists(config_path):
         raise FileNotFoundError(f"[DiffFuSR] Config not found at: {config_path}")
 
-    sys.stderr.write(f"[DiffFuSR] Loading model from checkpoint: {CKPT_PATH}\n")
+    sys.stderr.write(f"[DiffFuSR] Loading model from checkpoint on {_device_name}...\n")
     sys.stderr.flush()
 
     config = read_yaml(config_path)
-    _model = litsr.models.load_model(config, CKPT_PATH, strict=False)
-    _model = _model.to(_device).eval()
+    model = litsr.models.load_model(config, CKPT_PATH, strict=False)
+    model = model.to(_device).eval()
 
-    sys.stderr.write("[DiffFuSR] Model loaded successfully and ready for inference.\n")
+    _model = model
+    sys.stderr.write(
+        f"[DiffFuSR] Model loaded successfully: {_device_name} [{_mode.upper()}]. Ready for tile inference.\n"
+    )
     sys.stderr.flush()
     return _model, _device
 
@@ -142,7 +307,9 @@ def super_resolve_tile(img_bytes, output_tile_size=(256, 256)):
     """
     Super-resolves an input tile (RGB 256x256) to 1024x1024 using DiffFuSR,
     and returns Lanczos-downscaled 256x256 PNG bytes for map view.
+    Includes real-time GPU-to-CPU failover if device memory or CUDA errors occur.
     """
+    global _model, _device, _mode, _device_name
     t0 = time.time()
     model, device = get_model()
 
@@ -154,9 +321,23 @@ def super_resolve_tile(img_bytes, output_tile_size=(256, 256)):
     arr = np.array(lr_pil, dtype=np.float32) / 255.0
     lr_t = torch.from_numpy(arr).permute(2, 0, 1).unsqueeze(0).to(device)
 
-    # Step 2: DiffFuSR inference forward pass
-    with torch.no_grad():
-        rslt = model.test_step_lr_only((lr_t, ["Tile"]))
+    # Step 2: DiffFuSR inference forward pass with GPU failover
+    try:
+        with torch.no_grad():
+            rslt = model.test_step_lr_only((lr_t, ["Tile"]))
+    except Exception as run_err:
+        if _mode == "gpu":
+            sys.stderr.write(
+                f"[DiffFuSR Warning] GPU inference error ({run_err}). "
+                f"Reverting to CPU rendering fallback...\n"
+            )
+            sys.stderr.flush()
+            model, device = get_model(force_cpu=True)
+            lr_t = lr_t.to(device)
+            with torch.no_grad():
+                rslt = model.test_step_lr_only((lr_t, ["Tile"]))
+        else:
+            raise run_err
 
     sr_np = rslt["log_img_sr"]
     if isinstance(sr_np, torch.Tensor):
@@ -182,7 +363,7 @@ def super_resolve_tile(img_bytes, output_tile_size=(256, 256)):
 
     elapsed_ms = (time.time() - t0) * 1000
     sys.stderr.write(
-        f"[DiffFuSR] ✓ Tile processed in {elapsed_ms:.1f}ms [{device.type.upper()}] | "
+        f"[DiffFuSR] ✓ Tile processed in {elapsed_ms:.1f}ms [{_device_name} / {_mode.upper()}] | "
         f"output {sr_pil.size[0]}x{sr_pil.size[1]}px | {len(out_bytes) // 1024}KB\n"
     )
     sys.stderr.flush()
@@ -202,18 +383,19 @@ def run_daemon():
     """
     Persistent daemon: reads JSON from stdin, writes JSON to stdout.
     Request:  {"in": "/path/to/input.png", "out": "/path/to/output.png"}
-    Response: {"status": "ok", "out": "/path/to/output.png"}
+    Response: {"status": "ok", "out": "/path/to/output.png", "mode": "gpu"|"cpu", "device": "..."}
     """
     get_model()
-    sys.stdout.write(
-        json.dumps({
-            "status": "ready",
-            "model": "DiffFuSR",
-            "device": str(_device),
-        }) + "\n"
-    )
+    ready_payload = {
+        "status": "ready",
+        "model": "DiffFuSR",
+        "mode": _mode,
+        "device": _device_name,
+        "hardware": _detected_hardware or {}
+    }
+    sys.stdout.write(json.dumps(ready_payload) + "\n")
     sys.stdout.flush()
-    sys.stderr.write(f"[DiffFuSR Daemon] Ready. Listening on stdin (device: {_device}).\n")
+    sys.stderr.write(f"[DiffFuSR Daemon] Ready. Acceleration: {_mode.upper()} | Device: {_device_name}\n")
     sys.stderr.flush()
 
     for line in sys.stdin:
@@ -225,7 +407,13 @@ def run_daemon():
             in_path = req["in"]
             out_path = req["out"]
             super_resolve_file(in_path, out_path)
-            sys.stdout.write(json.dumps({"status": "ok", "out": out_path}) + "\n")
+            res_payload = {
+                "status": "ok",
+                "out": out_path,
+                "mode": _mode,
+                "device": _device_name
+            }
+            sys.stdout.write(json.dumps(res_payload) + "\n")
         except Exception as e:
             sys.stderr.write(f"[DiffFuSR Error] {str(e)}\n")
             sys.stderr.flush()

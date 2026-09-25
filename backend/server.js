@@ -38,8 +38,9 @@ app.get('/api/tiles/:band/:z/:x/:y.png', async (req, res) => {
       const { getDiffFuSRStatus } = require('./src/services/difffusrService');
       const status = getDiffFuSRStatus();
       res.set('X-SR-Model', 'DiffFuSR');
-      res.set('X-SR-Device', status.device);
-      console.log(`[Tile Request] >> Serving DiffFuSR tile: z=${zoom}, x=${tileX}, y=${tileY} [${status.device}]`);
+      res.set('X-SR-Mode', status.mode || 'cpu');
+      res.set('X-SR-Device', status.device || 'CPU');
+      console.log(`[Tile Request] >> Serving DiffFuSR tile: z=${zoom}, x=${tileX}, y=${tileY} [${(status.mode || 'cpu').toUpperCase()}: ${status.device || 'CPU'}]`);
     }
 
     if (band === 'sr') {

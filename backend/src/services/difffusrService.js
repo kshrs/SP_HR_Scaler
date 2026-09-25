@@ -13,7 +13,9 @@ let activeTask = null;
 let modelStatus = {
   ready: false,
   model: 'DiffFuSR',
+  mode: 'detecting',
   device: 'Detecting...',
+  hardware: null,
 };
 
 function ensureDiffFuSRDaemon() {
@@ -43,9 +45,11 @@ function ensureDiffFuSRDaemon() {
         modelStatus = {
           ready: true,
           model: msg.model || 'DiffFuSR',
+          mode: msg.mode || 'cpu',
           device: msg.device || 'CPU',
+          hardware: msg.hardware || null,
         };
-        console.log(`[DiffFuSR Service] Daemon online. Model: ${modelStatus.model} on ${modelStatus.device}`);
+        console.log(`[DiffFuSR Service] Daemon online. Model: ${modelStatus.model} [${modelStatus.mode.toUpperCase()}] on ${modelStatus.device}`);
         processNext();
       } else if (activeTask) {
         const { resolve, reject } = activeTask;

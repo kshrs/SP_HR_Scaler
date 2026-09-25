@@ -430,6 +430,15 @@ async function getOrFetchTile(band, z, x, y) {
     try {
       let pngBuffer;
 
+      if (bandKey === 'difffusr' || bandKey === 'diffsr') {
+        // DiffFuSR path: first fetch base RGB tile, then super-resolve with DiffFuSR diffusion model
+        const rgbBuffer = await getOrFetchTile('rgb', z, x, y);
+        const rgbCachePath = getCacheFilePath('rgb', z, x, y);
+        const { superResolveDiffFuSRTileFile } = require('./difffusrService');
+        await superResolveDiffFuSRTileFile(rgbCachePath, cachePath);
+        return fs.readFileSync(cachePath);
+      }
+
       if (bandKey === 'sr' || bandKey === 'swin2sr') {
         // SR path: first fetch base RGB tile, then super-resolve
         const rgbBuffer = await getOrFetchTile('rgb', z, x, y);

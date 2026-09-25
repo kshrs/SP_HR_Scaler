@@ -15,6 +15,15 @@ const INITIAL_BANDS: BandItem[] = [
     tilePattern: '/api/tiles/rgb/{z}/{x}/{y}.png',
   },
   {
+    id: 'difffusr',
+    code: 'DiffFuSR',
+    name: 'DiffFuSR Super-Res',
+    category: 'preset',
+    resolution: '2.5m',
+    description: '4x Diffusion Super-Resolution (WorldStrat)',
+    tilePattern: '/api/tiles/difffusr/{z}/{x}/{y}.png',
+  },
+  {
     id: 'sr',
     code: 'SR',
     name: 'Swin2SR Super-Res',

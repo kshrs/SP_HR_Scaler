@@ -34,6 +34,14 @@ app.get('/api/tiles/:band/:z/:x/:y.png', async (req, res) => {
       return res.status(400).json({ error: 'Invalid tile coordinates' });
     }
 
+    if (band === 'difffusr' || band === 'diffsr') {
+      const { getDiffFuSRStatus } = require('./src/services/difffusrService');
+      const status = getDiffFuSRStatus();
+      res.set('X-SR-Model', 'DiffFuSR');
+      res.set('X-SR-Device', status.device);
+      console.log(`[Tile Request] >> Serving DiffFuSR tile: z=${zoom}, x=${tileX}, y=${tileY} [${status.device}]`);
+    }
+
     if (band === 'sr') {
       const { getHardwareStatus } = require('./src/services/swin2srService');
       const hw = getHardwareStatus();
@@ -170,6 +178,15 @@ app.get('/api/metadata', (req, res) => {
         tilePattern: '/api/tiles/rgb/{z}/{x}/{y}.png',
         type: 'composite',
         description: 'Human-readable visual composite (B04 + B03 + B02)',
+      },
+      {
+        id: 'difffusr',
+        code: 'DiffFuSR',
+        name: 'DiffFuSR Super-Resolution',
+        resolution: '2.5m',
+        tilePattern: '/api/tiles/difffusr/{z}/{x}/{y}.png',
+        type: 'composite',
+        description: 'Diffusion-based 4x Super-Resolution Enhanced Imagery (DiffFuSR WorldStrat)',
       },
       {
         id: 'sr',
@@ -342,14 +359,22 @@ app.get('/api/health', (req, res) => {
 
 // Swin2SR Hardware & Acceleration Status endpoint
 const { getHardwareStatus, ensureDaemon } = require('./src/services/swin2srService');
+const { getDiffFuSRStatus, ensureDiffFuSRDaemon } = require('./src/services/difffusrService');
 
 app.get('/api/swin2sr/status', (req, res) => {
   res.json(getHardwareStatus());
+});
+
+// DiffFuSR Model Status endpoint
+app.get('/api/difffusr/status', (req, res) => {
+  res.json(getDiffFuSRStatus());
 });
 
 app.listen(PORT, () => {
   console.log(`Node backend running on http://localhost:${PORT}`);
   // Bootstrap Swin2SR acceleration daemon in background to detect GPU / CPU hardware
   ensureDaemon();
+  // Bootstrap DiffFuSR diffusion model daemon in background
+  ensureDiffFuSRDaemon();
 });
 

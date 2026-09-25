@@ -51,6 +51,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
                     item.id === 'rgb'
                       ? 'bg-[#00bcd4] shadow-[0_0_6px_#00bcd4]'
+                      : item.id === 'difffusr'
+                      ? 'bg-purple-500 shadow-[0_0_6px_#a855f7]'
+                      : item.id === 'sr'
+                      ? 'bg-amber-400 shadow-[0_0_6px_#f59e0b]'
                       : 'bg-rose-500/80'
                   }`}
                 />

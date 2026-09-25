@@ -47,9 +47,26 @@ export const Header: React.FC<HeaderProps> = ({
       className="h-14 bg-[#141619] border-b border-[#22272d] flex items-center justify-between px-4 z-30 flex-shrink-0 select-none"
       data-purpose="application-header"
     >
-      <div className="flex items-center space-x-6">
+      <div className="flex items-center space-x-4">
+        {/* Hamburger Menu Toggle Button */}
+        <button
+          type="button"
+          onClick={onToggleSidebar}
+          aria-label={isSidebarOpen ? 'Close sidebar' : 'Open sidebar'}
+          title={isSidebarOpen ? 'Close sidebar' : 'Open sidebar'}
+          className={`p-1.5 rounded-md transition-colors cursor-pointer focus:outline-none ${
+            isSidebarOpen
+              ? 'text-[#00bcd4] bg-[#00bcd4]/10 hover:bg-[#00bcd4]/20'
+              : 'text-[#7a828e] hover:text-white hover:bg-[#22272d]'
+          }`}
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+
         {/* Brand Logo & Title */}
-        <div className="flex items-center space-x-3 w-44">
+        <div className="flex items-center space-x-3">
           <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="currentColor">
             <path d="M14.5 2.5L5.5 13h5.2L7.2 21.5l11.3-11h-5.8L16.2 2.5h-1.7z" />
           </svg>
@@ -178,35 +195,6 @@ export const Header: React.FC<HeaderProps> = ({
               className={`pointer-events-none inline-block h-3.5 w-3.5 transform rounded-full shadow transition-transform duration-200 ease-in-out ${
                 isSplitView
                   ? 'translate-x-5 bg-amber-400'
-                  : 'translate-x-0 bg-[#7a828e]'
-              }`}
-            />
-          </button>
-        </div>
-
-        {/* Sidebar toggle slider */}
-        <div
-          className="flex items-center space-x-2 cursor-pointer select-none group"
-          onClick={onToggleSidebar}
-        >
-          <span className="text-xs text-[#7a828e] group-hover:text-white transition-colors font-medium">
-            Sidebar
-          </span>
-          <button
-            aria-checked={isSidebarOpen}
-            role="switch"
-            type="button"
-            className={`relative inline-flex h-5 w-10 flex-shrink-0 cursor-pointer rounded-full border p-0.5 transition-colors duration-200 ease-in-out focus:outline-none shadow-sm ${
-              isSidebarOpen
-                ? 'border-[#00bcd4]/60 bg-[#00bcd4]/20'
-                : 'border-[#2b3038] bg-[#191c20]'
-            }`}
-            title="Toggle Sidebar Slider"
-          >
-            <span
-              className={`pointer-events-none inline-block h-3.5 w-3.5 transform rounded-full shadow transition-transform duration-200 ease-in-out ${
-                isSidebarOpen
-                  ? 'translate-x-5 bg-[#00bcd4]'
                   : 'translate-x-0 bg-[#7a828e]'
               }`}
             />
